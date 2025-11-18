@@ -59,7 +59,7 @@ int extractqueryprofiles(int argc, const char **argv, const Command& command) {
     DBWriter headerWriter(par.hdr2.c_str(), par.hdr2Index.c_str(), par.threads, false, Parameters::DBTYPE_GENERIC_DB);
     headerWriter.open();
 
-    SubstitutionMatrix subMat(par.scoringMatrixFile.values.aminoacid().c_str(), 2.0, -0.2f);
+    SubstitutionMatrix subMat(par.scoringMatrixFile.values.aminoacid().c_str(), 8.0, -0.2f);
 
     Debug::Progress progress(reader.getSize());
 #pragma omp parallel
@@ -76,10 +76,13 @@ int extractqueryprofiles(int argc, const char **argv, const Command& command) {
             queryFrom = 0;
         }
 
-        char* msaContent = (char*) mem_align(ALIGN_INT, sizeof(char) * (maxSeqLength + 1) * 1);
-        char** msaSequences = (char**) mem_align(ALIGN_INT, sizeof(char*) * 1);
-        msaSequences[0] = msaContent;
-        float * profile = new float[(maxSeqLength + 1) * Sequence::PROFILE_AA_SIZE];
+        char* profile_char = new char[(maxSeqLength + 1) * Sequence::PROFILE_READIN_SIZE];
+        float* neffM = new float[maxSeqLength + 1];
+        // Initialize with 1.0
+        for (size_t i = 0; i < maxSeqLength + 1; i++) {
+            neffM[i] = 1.0f;
+        }
+        float* compositionBias = new float[maxSeqLength + 1];
 
         char buffer[1024];
         std::string result;
@@ -91,7 +94,6 @@ int extractqueryprofiles(int argc, const char **argv, const Command& command) {
             &subMat, maxSeqLength + 1, 1, par.pcmode, par.pca, par.pcb
         );
 
-        float *pNullBuffer = new float[maxSeqLength + 1];
         char* data_cpy = (char*)malloc(sizeof(char) * maxSeqLength * Sequence::PROFILE_READIN_SIZE);
         
         for (unsigned int i = queryFrom; i < (queryFrom + querySize); ++i){
@@ -149,65 +151,64 @@ int extractqueryprofiles(int argc, const char **argv, const Command& command) {
                 headerWriter.writeData(buffer, bufferLen, key, thread_idx);
                 result.clear();
             } else {
-                // fill the msaContent with the numSequence
-                memcpy(msaContent, seq.numSequence, seqLen * sizeof(unsigned char));
-                // fill up the sequence buffer for the SIMD profile calculation
-                size_t rowSize = seqLen / (VECSIZE_INT*4);
-                rowSize = (rowSize+1) * (VECSIZE_INT*4);
-                size_t msaPos = seqLen;
-                while(msaPos < rowSize) {
-                    msaContent[msaPos++] = MultipleAlignment::GAP;
-                }
-
-                PSSMCalculator::Profile pssmRes = calculator.computePSSMFromMSA(1, seqLen, (const char **) msaSequences, par.wg, 0.0);
+                // Get local composition bias
                 if (par.compBiasCorrection == true) {
-                    SubstitutionMatrix::calcGlobalAaBiasCorrection(&subMat, pssmRes.pssm, pNullBuffer,
-                                                                Sequence::PROFILE_AA_SIZE,
-                                                                seqLen);
+                    SubstitutionMatrix::calcLocalAaBiasCorrection(&subMat, seq.numSequence, seqLen, compositionBias, par.compBiasCorrectionScale);
+                } else {
+                    memset(compositionBias, 0, sizeof(float) * (seqLen + 1));
                 }
-                pssmRes.toBuffer((const unsigned char*)msaSequences[0], seqLen, subMat, result);
+                // Make a basic profile
+                for (size_t pos = 0; pos < seqLen; pos++) {
+                    unsigned int aaIdx = seq.numSequence[pos];
+                    for (size_t aa_num = 0; aa_num < Sequence::PROFILE_AA_SIZE; aa_num++) {
+                        profile_char[pos * Sequence::PROFILE_READIN_SIZE + aa_num] = subMat.subMatrix[aaIdx][aa_num] + static_cast<char>((compositionBias[pos]) > 0.0 ?
+                                                    compositionBias[pos]+0.5 : compositionBias[pos]-0.5);
+                    }
+                }
+                // seq.numConsensusSequence same as seq.numSequence for single sequence
+                memcpy(seq.numConsensusSequence, seq.numSequence, sizeof(unsigned char) * seqLen);
+                // seq.neffM is 1.0 for single sequence
+                toBuffer(profile_char, seq.numSequence, seq.numConsensusSequence, neffM, seqLen, result);
                 sequenceWriter.writeData(result.c_str(), result.length(), key, thread_idx);
-                result.clear();
 
                 bufferLen = Orf::writeOrfHeader(buffer, key, static_cast<size_t>(0), seqLen - 1, 0, 0);
                 headerWriter.writeData(buffer, bufferLen, key, thread_idx);
+                result.clear();
 
-                // Do the same thing with the reversed profile
-                // Reverse the msaSequences[0], pssmRes.consensus, pssmRes.pssm, pssmRes.neffM
-                std::reverse(msaSequences[0], msaSequences[0] + seqLen);
-                std::reverse(pssmRes.consensus, pssmRes.consensus + seqLen);
-                std::reverse(pssmRes.neffM, pssmRes.neffM + seqLen);
-                char tmpPssm[Sequence::PROFILE_AA_SIZE];
+                // Now do the same thing for the reversed profile
+                // Reverse the seq.numSequence and profile_char
+                std::reverse(seq.numSequence, seq.numSequence + seqLen);
+                std::reverse(seq.numConsensusSequence, seq.numConsensusSequence + seqLen);
+                char tmpPssm[Sequence::PROFILE_READIN_SIZE];
                 int i_curr = 0;
-                int j_curr = (seqLen - 1) * Sequence::PROFILE_AA_SIZE;
+                int j_curr = (seqLen - 1) * Sequence::PROFILE_READIN_SIZE;
                 for (size_t pos = 0; pos < seqLen/2; pos++) {
-                    memcpy(&tmpPssm[0], pssmRes.pssm + i_curr, Sequence::PROFILE_AA_SIZE * sizeof(char));
-                    memcpy(pssmRes.pssm + i_curr, pssmRes.pssm + j_curr, Sequence::PROFILE_AA_SIZE * sizeof(char));
-                    memcpy(pssmRes.pssm + j_curr, &tmpPssm[0], Sequence::PROFILE_AA_SIZE * sizeof(char));
-                    i_curr += Sequence::PROFILE_AA_SIZE;
-                    j_curr -= Sequence::PROFILE_AA_SIZE;
+                    memcpy(&tmpPssm[0], profile_char + i_curr, Sequence::PROFILE_READIN_SIZE * sizeof(char));
+                    memcpy(profile_char + i_curr, profile_char + j_curr, Sequence::PROFILE_READIN_SIZE * sizeof(char));
+                    memcpy(profile_char + j_curr, &tmpPssm[0], Sequence::PROFILE_READIN_SIZE * sizeof(char));
+                    i_curr += Sequence::PROFILE_READIN_SIZE;
+                    j_curr -= Sequence::PROFILE_READIN_SIZE;
                 }
                 for (size_t pos = 0; pos < seqLen; pos++) {
                     // Swap following position pairs: (1,15), (2,6), (4,12), (5,7), (8,9), (10,11)
-                    std::swap(pssmRes.pssm[pos * Sequence::PROFILE_AA_SIZE + 1], pssmRes.pssm[pos * Sequence::PROFILE_AA_SIZE + 15]);
-                    std::swap(pssmRes.pssm[pos * Sequence::PROFILE_AA_SIZE + 2], pssmRes.pssm[pos * Sequence::PROFILE_AA_SIZE + 6]);
-                    std::swap(pssmRes.pssm[pos * Sequence::PROFILE_AA_SIZE + 4], pssmRes.pssm[pos * Sequence::PROFILE_AA_SIZE + 12]);
-                    std::swap(pssmRes.pssm[pos * Sequence::PROFILE_AA_SIZE + 5], pssmRes.pssm[pos * Sequence::PROFILE_AA_SIZE + 7]);
-                    std::swap(pssmRes.pssm[pos * Sequence::PROFILE_AA_SIZE + 8], pssmRes.pssm[pos * Sequence::PROFILE_AA_SIZE + 9]);
-                    std::swap(pssmRes.pssm[pos * Sequence::PROFILE_AA_SIZE + 10], pssmRes.pssm[pos * Sequence::PROFILE_AA_SIZE + 11]);
+                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 1], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 15]);
+                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 2], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 6]);
+                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 4], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 12]);
+                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 5], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 7]);
+                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 8], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 9]);
+                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 10], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 11]);
                 }
-                pssmRes.toBuffer((const unsigned char*)msaSequences[0], seqLen, subMat, result);
+                toBuffer(profile_char, seq.numSequence, seq.numConsensusSequence, neffM, seqLen, result);
                 sequenceWriter.writeData(result.c_str(), result.length(), key, thread_idx);
-                
+
                 bufferLen = Orf::writeOrfHeader(buffer, key, seqLen - 1, static_cast<size_t>(0), 0, 0);
                 headerWriter.writeData(buffer, bufferLen, key, thread_idx);
                 result.clear();
             }
         }
-        delete[] profile;
-        free(msaSequences);
-        free(msaContent);
-        delete[] pNullBuffer;
+        delete[] profile_char;
+        delete[] neffM;
+        delete[] compositionBias;
         free(data_cpy);
     }
     headerWriter.close(true);
