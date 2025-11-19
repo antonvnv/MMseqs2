@@ -200,14 +200,14 @@ std::pair<const char *, unsigned int> Sequence::parseSpacedPattern(unsigned int 
     return std::make_pair<const char *, unsigned int>((const char *) pattern, spacedKmerPattern.size());
 }
 
-void Sequence::mapSequence(size_t id, unsigned int dbKey, const char *sequence, unsigned int seqLen) {
+void Sequence::mapSequence(size_t id, unsigned int dbKey, const char *sequence, unsigned int seqLen, bool remap, BaseMatrix* alignSubMat, bool reverse) {
     this->id = id;
     this->dbKey = dbKey;
     this->seqData = sequence;
     if (Parameters::isEqualDbtype(this->seqType, Parameters::DBTYPE_AMINO_ACIDS) || Parameters::isEqualDbtype(this->seqType, Parameters::DBTYPE_NUCLEOTIDES)) {
         mapSequence(sequence, seqLen);
     } else if (Parameters::isEqualDbtype(this->seqType, Parameters::DBTYPE_HMM_PROFILE)) {
-        mapProfile(sequence, seqLen);
+        mapProfile(sequence, seqLen, remap, alignSubMat, reverse);
     } else {
         Debug(Debug::ERROR) << "Invalid sequence type!\n";
         EXIT(EXIT_FAILURE);
@@ -238,18 +238,30 @@ void Sequence::mapSequence(size_t id, unsigned int dbKey, std::pair<const unsign
     currItPos = -1;
 }
 
-void Sequence::mapProfile(const char * profileData, unsigned int seqLen){
+void Sequence::mapProfile(const char * profileData, unsigned int seqLen, bool remap, BaseMatrix* alignSubMat, bool reverse) {
     char * data = (char *) profileData;
     size_t currPos = 0;
     // if no data exists
     {
         size_t l = 0;
         while (l < maxLen  && l < seqLen){
-            for (size_t aa_idx = 0; aa_idx < PROFILE_AA_SIZE; aa_idx++) {
-                profile_score[l * profile_row_size + aa_idx] = static_cast<short>(data[currPos + aa_idx]);
+            unsigned char queryLetter = data[currPos + PROFILE_AA_SIZE];
+            if (remap) {
+                if (reverse) {
+                    for (size_t aa_idx = 0; aa_idx < PROFILE_AA_SIZE; aa_idx++) {
+                        profile_score[l * profile_row_size + aa_idx] = subMat->subMatrix[queryLetter][subMat->revcomp[aa_idx]];
+                    }
+                } else {
+                    for (size_t aa_idx = 0; aa_idx < PROFILE_AA_SIZE; aa_idx++) {
+                        profile_score[l * profile_row_size + aa_idx] = subMat->subMatrix[queryLetter][aa_idx];
+                    }
+                }
+            } else {
+                for (size_t aa_idx = 0; aa_idx < PROFILE_AA_SIZE; aa_idx++) {
+                    profile_score[l * profile_row_size + aa_idx] = static_cast<short>(data[currPos + aa_idx]);
+                }
             }
 
-            unsigned char queryLetter = data[currPos + PROFILE_AA_SIZE];
             // read query sequence
             numSequence[l] = queryLetter; // index 0 is the highst scoring one
             numConsensusSequence[l] = data[currPos + PROFILE_CONSENSUS];
@@ -269,9 +281,27 @@ void Sequence::mapProfile(const char * profileData, unsigned int seqLen){
     }
 
     // create alignment profile
-    for (int i = 0; i < this->L; i++){
-        for (size_t aa_num = 0; aa_num < PROFILE_AA_SIZE; aa_num++) {
-            profile_for_alignment[aa_num * this-> L + i] = profile_score[i * profile_row_size + aa_num] / 4;
+    if (remap) {
+        if (reverse) {
+            for (int i = 0; i < this->L; i++) {
+                unsigned char queryLetter = numSequence[i];
+                for (size_t aa_num = 0; aa_num < PROFILE_AA_SIZE; aa_num++) {
+                    profile_for_alignment[aa_num * this-> L + i] = alignSubMat->subMatrix[queryLetter][alignSubMat->revcomp[aa_num]]; // Already scaled
+                }
+            }
+        } else {
+            for (int i = 0; i < this->L; i++) {
+                unsigned char queryLetter = numSequence[i];
+                for (size_t aa_num = 0; aa_num < PROFILE_AA_SIZE; aa_num++) {
+                    profile_for_alignment[aa_num * this-> L + i] = alignSubMat->subMatrix[queryLetter][aa_num]; // Already scaled
+                }
+            }
+        }
+    } else {
+        for (int i = 0; i < this->L; i++){
+            for (size_t aa_num = 0; aa_num < PROFILE_AA_SIZE; aa_num++) {
+                profile_for_alignment[aa_num * this-> L + i] = profile_score[i * profile_row_size + aa_num] / 4;
+            }
         }
     }
     // set the X value to 0

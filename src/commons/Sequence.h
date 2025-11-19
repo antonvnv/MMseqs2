@@ -80,7 +80,7 @@ public:
     ~Sequence();
 
     // Map char -> int
-    void mapSequence(size_t id, unsigned int dbKey, const char *seq, unsigned int seqLen);
+    void mapSequence(size_t id, unsigned int dbKey, const char *seq, unsigned int seqLen, bool remap=false, BaseMatrix* alignSubMat=NULL, bool reverse=false);
 
     // map sequence from SequenceLookup
     void mapSequence(size_t id, unsigned int dbKey, std::pair<const unsigned char *, const unsigned int> data);
@@ -88,7 +88,7 @@ public:
     void reverseComplement();
 
     // map profile HMM, *data points to start position of Profile
-    void mapProfile(const char *profileData, unsigned int seqLen);
+    void mapProfile(const char *profileData, unsigned int seqLen, bool remap=false, BaseMatrix* alignSubMat=NULL, bool reverse=false);
 
     // checks if there is still a k-mer left
     bool hasNextKmer() {

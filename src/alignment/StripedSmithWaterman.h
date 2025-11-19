@@ -247,7 +247,7 @@ public:
    -2 -2 -2  2 //T
    mat is the pointer to the array {2, -2, -2, -2, -2, 2, -2, -2, -2, -2, 2, -2, -2, -2, -2, 2}
    */
-    void ssw_init(const Sequence *q, const int8_t *mat, const BaseMatrix *m);
+    void ssw_init(const Sequence *q, const int8_t *mat, const BaseMatrix *m, bool forceCompBias = false, bool reverse = false);
 
     static char cigar_int_to_op (uint32_t cigar_int);
 

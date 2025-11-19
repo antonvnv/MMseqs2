@@ -400,7 +400,7 @@ void UngappedAlignment::createProfile(Sequence *seq,
         const int8_t * profile_aln = seq->getAlignmentProfile();
         for (int pos = 0; pos < seq->L; pos++) {
             for (size_t aa_num = 0; aa_num < Sequence::PROFILE_AA_SIZE; aa_num++) {
-                queryProfile[pos * (Sequence::PROFILE_AA_SIZE + 1) + aa_num] = (profile_aln[aa_num * seq->L + pos]);
+                queryProfile[pos * (Sequence::PROFILE_AA_SIZE + 1) + aa_num] = (profile_aln[aa_num * seq->L + pos] + aaCorrectionScore[pos]);
             }
         }
     }else{

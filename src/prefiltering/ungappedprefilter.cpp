@@ -15,6 +15,7 @@
 #include "SubstitutionMatrixProfileStates.h"
 #include "IndexReader.h"
 #include "QueryMatcherTaxonomyHook.h"
+#include "Orf.h"
 
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -336,9 +337,9 @@ void runFilterOnGpu(Parameters & par, BaseMatrix * subMat,
 #endif
 
 void runFilterOnCpu(Parameters & par, BaseMatrix * subMat, int8_t * tinySubMat,
-                    DBReader<unsigned int> * qdbr, DBReader<unsigned int> * tdbr,
+                    DBReader<unsigned int> * qdbr, DBReader<unsigned int> * qhdbr, DBReader<unsigned int> * tdbr,
                     SequenceLookup * sequenceLookup, bool sameDB, DBWriter & resultWriter, EvalueComputation * evaluer,
-                    QueryMatcherTaxonomyHook *taxonomyHook, int alignmentMode){
+                    QueryMatcherTaxonomyHook *taxonomyHook, int alignmentMode, bool forceCompBias){
     std::vector<hit_t> shortResults;
     shortResults.reserve(tdbr->getSize()/2);
     Debug::Progress progress(qdbr->getSize());
@@ -368,10 +369,16 @@ void runFilterOnCpu(Parameters & par, BaseMatrix * subMat, int8_t * tinySubMat,
             size_t queryKey = qdbr->getDbKey(id);
             unsigned int querySeqLen = qdbr->getSeqLen(id);
 
-            qSeq.mapSequence(id, queryKey, querySeqData, querySeqLen);
+            // Get the header
+            char *queryHeaderData = qhdbr->getData(id, thread_idx);
+            Orf::SequenceLocation qloc = Orf::parseOrfHeader(queryHeaderData);
+            bool reverse = (qloc.strand == Orf::STRAND_PLUS) ? false : true;
+
+            // TODO: Need to make a new boolean parameter for remap, not forceCompBias
+            qSeq.mapSequence(id, queryKey, querySeqData, querySeqLen, forceCompBias, subMat, reverse);
 //            qSeq.printProfileStatePSSM();
             if(Parameters::isEqualDbtype(qSeq.getSeqType(), Parameters::DBTYPE_HMM_PROFILE) ){
-                aligner.ssw_init(&qSeq, qSeq.getAlignmentProfile(), subMat);
+                aligner.ssw_init(&qSeq, qSeq.getAlignmentProfile(), subMat, forceCompBias, reverse);
             }else{
                 aligner.ssw_init(&qSeq, tinySubMat, subMat);
             }
@@ -484,7 +491,9 @@ int prefilterInternal(int argc, const char **argv, const Command &command, int m
     bool touch = (par.preloadMode != Parameters::PRELOAD_MODE_MMAP);
     IndexReader tDbrIdx(par.db2, par.threads, IndexReader::SEQUENCES, (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0 );
     IndexReader * qDbrIdx = NULL;
+    IndexReader * qhDbrIdx = NULL;
     DBReader<unsigned int> * qdbr = NULL;
+    DBReader<unsigned int> * qhdbr = NULL;
     DBReader<unsigned int> * tdbr = tDbrIdx.sequenceReader;
 
     if (par.gpu == true) {
@@ -508,6 +517,8 @@ int prefilterInternal(int argc, const char **argv, const Command &command, int m
         qdbr = qDbrIdx->sequenceReader;
         querySeqType = qdbr->getDbtype();
     }
+    qhDbrIdx = new IndexReader(par.db1.c_str(), par.threads, IndexReader::HEADERS, (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0);
+    qhdbr = qhDbrIdx->sequenceReader;
 
     SequenceLookup * sequenceLookup = NULL;
     if(Parameters::isEqualDbtype(tDbrIdx.getDbtype(), Parameters::DBTYPE_INDEX_DB)){
@@ -554,8 +565,8 @@ int prefilterInternal(int argc, const char **argv, const Command &command, int m
         EXIT(EXIT_FAILURE);
 #endif
     }else{
-        runFilterOnCpu(par, subMat, tinySubMat, qdbr, tdbr, sequenceLookup, sameDB,
-                   resultWriter, evaluer, taxonomyHook,  mode);
+        runFilterOnCpu(par, subMat, tinySubMat, qdbr, qhdbr, tdbr, sequenceLookup, sameDB,
+                   resultWriter, evaluer, taxonomyHook,  mode, par.forceCompBiasCorrection);
     }
 
     resultWriter.close();
@@ -571,6 +582,7 @@ int prefilterInternal(int argc, const char **argv, const Command &command, int m
     if(sameDB == false){
         delete qDbrIdx;
     }
+    delete qhDbrIdx;
 
     delete [] tinySubMat;
     delete subMat;

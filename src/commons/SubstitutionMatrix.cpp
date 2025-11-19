@@ -78,14 +78,19 @@ bool SubstitutionMatrix::estimateLambdaAndBackground(
 
 
 void SubstitutionMatrix::calcLocalAaBiasCorrection(const BaseMatrix *m,
-                                                   const unsigned char *int_sequence,
+                                                   unsigned char *int_sequence,
                                                    const int N,
                                                    float *compositionBias,
-                                                   float scale) {
+                                                   float scale,
+                                                   bool reverse) {
+    // if reverse is true (on negative strand), reverse the int_sequence
+    if (reverse) {
+        std::reverse(int_sequence, int_sequence + N);
+    }
     const int windowSize = 50;
     for (int i = 0; i < N; i++) {
         const int minPos = std::max(0, (i - windowSize / 2));
-        const int maxPos = std::min(N, (i + windowSize / 2));
+        const int maxPos = std::min(N, (i + (windowSize+1) / 2));
         const int windowLength = maxPos - minPos;
 
         // negative score for the amino acids in the neighborhood of i
@@ -106,6 +111,10 @@ void SubstitutionMatrix::calcLocalAaBiasCorrection(const BaseMatrix *m,
         }
         compositionBias[i] = scale * deltaS_i;
 //        std::cout << i << " " << compositionBias[i] << std::endl;
+    }
+    if (reverse) {
+        std::reverse(compositionBias, compositionBias + N);
+        std::reverse(int_sequence, int_sequence + N);
     }
 }
 
@@ -132,7 +141,7 @@ void SubstitutionMatrix::calcProfileProfileLocalAaBiasCorrection(short *profileS
         pnul[aa] /= N;
     for (int i = 0; i < N; i++){
         const int minPos = std::max(0, (i - windowSize/2));
-        const int maxPos = std::min(N, (i + windowSize/2));
+        const int maxPos = std::min(N, (i + (windowSize+1)/2));
         const int windowLength = maxPos - minPos;
         // negative score for the amino acids in the neighborhood of i
         memset(aaSum, 0, sizeof(float) * alphabetSize);
@@ -172,7 +181,7 @@ void SubstitutionMatrix::calcProfileProfileLocalAaBiasCorrectionAln(int8_t *prof
 
     for (unsigned int i = 0; i < N; i++){
         const int minPos = std::max(0, ((int)i - windowSize/2));
-        const unsigned int maxPos = std::min(N, (i + windowSize/2));
+        const unsigned int maxPos = std::min(N, (i + (windowSize+1)/2));
         const int windowLength = maxPos - minPos;
         // negative score for the amino acids in the neighborhood of i
         memset(aaSum, 0, sizeof(float) * alphabetSize);
@@ -220,7 +229,7 @@ void SubstitutionMatrix::calcGlobalAaBiasCorrection(const BaseMatrix *m,
 //        pNullBuffer[aa] /= N;
     for (int i = 0; i < N; i++) {
         const int minPos = std::max(0, (i - windowSize / 2));
-        const int maxPos = std::min(N, (i + windowSize / 2));
+        const int maxPos = std::min(N, (i + (windowSize+1) / 2));
         const int windowLength = maxPos - minPos;
         // negative score for the amino acids in the neighborhood of i
         float aaSum[20];

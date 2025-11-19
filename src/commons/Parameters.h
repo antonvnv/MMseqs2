@@ -421,6 +421,7 @@ public:
     MultiParam<SeqProf<int>> kmerScore;   // kmer score for the prefilter
     MultiParam<NuclAA<int>> alphabetSize; // alphabet size for the prefilter
     int    compBiasCorrection;           // Aminoacid composiont correction
+    int    forceCompBiasCorrection;        // force composition correction even for profile
     float    compBiasCorrectionScale;    // Aminoacid composiont correction scale factor
 
     bool   diagonalScoring;              // switch diagonal scoring
@@ -811,6 +812,7 @@ public:
     PARAMETER(PARAM_SUB_MAT)
     PARAMETER(PARAM_SEED_SUB_MAT)
     PARAMETER(PARAM_NO_COMP_BIAS_CORR)
+    PARAMETER(PARAM_NO_FORCE_COMP_BIAS_CORR)
     PARAMETER(PARAM_NO_COMP_BIAS_CORR_SCALE)
     PARAMETER(PARAM_SPACED_KMER_MODE)
     PARAMETER(PARAM_REMOVE_TMP_FILES)

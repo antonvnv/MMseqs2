@@ -179,9 +179,9 @@ int computeSearchMode(int queryDbType, int targetDbType, int targetSrcDbType, in
 
 void setNuclSearchDefaults(Parameters *p) {
     // leave ungapped alignment untouched
-    if(p->alignmentMode != Parameters::ALIGNMENT_MODE_UNGAPPED){
-        p->alignmentMode = Parameters::ALIGNMENT_MODE_SCORE_COV_SEQID;
-    }
+    // if(p->alignmentMode != Parameters::ALIGNMENT_MODE_UNGAPPED){
+    //     p->alignmentMode = Parameters::ALIGNMENT_MODE_SCORE_COV_SEQID;
+    // }
     //p->orfLongest = true;
     // p->exactKmerMatching = true;
 //    if ( p->PARAM_DIAGONAL_SCORING.wasSet == false) {
@@ -196,6 +196,7 @@ void setNuclSearchDefaults(Parameters *p) {
     if (  p->PARAM_MAX_SEQ_LEN.wasSet == false) {
         p->maxSeqLen = 10000;
     }
+    p->forceCompBiasCorrection = true;
 }
 
 
@@ -490,9 +491,17 @@ int search(int argc, const char **argv, const Command& command) {
         double originalEval = par.evalThr;
         par.evalThr = (par.evalThr < par.evalProfile) ? par.evalThr  : par.evalProfile;
         for (int i = 0; i < par.numIterations; i++) {
-            if (i == 0 && (searchMode & Parameters::SEARCH_MODE_FLAG_TARGET_PROFILE) == false) {
-                par.realign = true;
+            if (i == 0) {
+                par.forceCompBiasCorrection = true;
+                if ((searchMode & Parameters::SEARCH_MODE_FLAG_QUERY_PROFILE) == false) {
+                    par.realign = true;
+                }
+            } else {
+                par.forceCompBiasCorrection = false;
             }
+            // if (i == 0 && (searchMode & Parameters::SEARCH_MODE_FLAG_TARGET_PROFILE) == false) {
+            //     par.realign = true;
+            // }
 
             // disable realign for iterative nucl search
             if (searchMode & Parameters::SEARCH_MODE_FLAG_QUERY_NUCLEOTIDE && searchMode & Parameters::SEARCH_MODE_FLAG_TARGET_NUCLEOTIDE) {
