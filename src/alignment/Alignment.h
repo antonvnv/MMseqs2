@@ -84,7 +84,9 @@ private:
     int querySeqType;
     int targetSeqType;
     bool compBiasCorrection;
+    bool forceCompBias;
     float compBiasCorrectionScale;
+    bool remapProfile;
 
     int altAlignment;
     int alignmentOutputMode;
@@ -112,6 +114,9 @@ private:
 
     DBReader<unsigned int> *qdbr;
     IndexReader * qDbrIdx;
+
+    DBReader<unsigned int> *qhdbr;
+    IndexReader * qhDbrIdx;
 
     DBReader<unsigned int> *tdbr;
     IndexReader * tDbrIdx;

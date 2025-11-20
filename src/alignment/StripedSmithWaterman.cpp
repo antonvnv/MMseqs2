@@ -161,16 +161,13 @@ void SmithWaterman::createQueryProfile(simd_int *profile, const int8_t *query_se
 					
 						*t++ = mat[nt * aaSize + q] + cb + bias;        
 					}
-				} if(type == PROFILE && composition_bias != NULL) {  // profile with aa composition bias
+				} if(type == PROFILE) {
                     // profile starts by 0
 //                    *t++ = (j >= query_length) ? bias : (mat[nt * entryLength + (j + (offset - 1))] + bias); //mat eq L*20  // mat[nt][j]
-                    *t++ = (j >= query_length) ? bias : mat[nt * entryLength + j + offset] + bias + composition_bias[j + offset];
+                    *t++ = (j >= query_length) ? bias : mat[nt * entryLength + j + offset] + bias;
 //					// profile starts by 0 // TODO: offset?
 //					*t++ = (j >= query_length) ? bias : mat[nt * entryLength + j + offset] + bias; //mat eq L*20  // mat[nt][j]
 //					printf("(%1d, %1d) ", j , *(t-1));
-				} else if (type == PROFILE && composition_bias == NULL) { // profile without aa composition bias
-					// profile starts by 0
-					*t++ = (j >= query_length) ? bias : mat[nt * entryLength + j + offset] + bias; //mat eq L*20  // mat[nt][j]
 				}
 				j += segLen;
 			}
@@ -1327,7 +1324,7 @@ std::pair<SmithWaterman::alignment_end, SmithWaterman::alignment_end> SmithWater
 
 void SmithWaterman::ssw_init(const Sequence* q,
 							 const int8_t* mat,
-							 const BaseMatrix *m, bool forceCompBias, bool reverse) {
+							 const BaseMatrix *m) {
 	//init profile
     profile->bias = 0;
 	profile->query_length = q->L;
@@ -1337,8 +1334,8 @@ void SmithWaterman::ssw_init(const Sequence* q,
 	bool isProfile = Parameters::isEqualDbtype(q->getSequenceType(), Parameters::DBTYPE_HMM_PROFILE);
 	profile->isProfile = isProfile;
 	int32_t compositionBias = 0;
-	if (forceCompBias || (!isProfile && aaBiasCorrection)) {
-		SubstitutionMatrix::calcLocalAaBiasCorrection(m, q->numSequence, q->L, tmp_composition_bias, aaBiasCorrectionScale, reverse);
+	if (!isProfile && aaBiasCorrection) {
+		SubstitutionMatrix::calcLocalAaBiasCorrection(m, q->numSequence, q->L, tmp_composition_bias, aaBiasCorrectionScale);
 		for (int i =0; i < q->L; i++) {
 			profile->composition_bias[i] = (int8_t) (tmp_composition_bias[i] < 0.0)? tmp_composition_bias[i] - 0.5: tmp_composition_bias[i] + 0.5;
 			compositionBias = (compositionBias < profile->composition_bias[i]) ? compositionBias : profile->composition_bias[i];
@@ -1372,13 +1369,13 @@ void SmithWaterman::ssw_init(const Sequence* q,
     if (isProfile) {
         // offset = 1 when createQueryProfile
         // create byte version of profiles
-        createQueryProfile<int8_t, VECSIZE_INT * 4, PROFILE>(profile->profile_byte, profile->query_sequence, profile->composition_bias,
+        createQueryProfile<int8_t, VECSIZE_INT * 4, PROFILE>(profile->profile_byte, profile->query_sequence, NULL,
                                                             profile->mat, q->L, alphabetSize, profile->bias, 0, q->L);
 		// create word version of profiles
-		createQueryProfile<int16_t, VECSIZE_INT * 2, PROFILE>(profile->profile_word, profile->query_sequence, profile->composition_bias,
+		createQueryProfile<int16_t, VECSIZE_INT * 2, PROFILE>(profile->profile_word, profile->query_sequence, NULL,
 															profile->mat, q->L, alphabetSize, 0, 0, q->L);
 		// create int version of profiles
-		createQueryProfile<int32_t, VECSIZE_INT * 1, PROFILE>(profile->profile_int, profile->query_sequence, profile->composition_bias,
+		createQueryProfile<int32_t, VECSIZE_INT * 1, PROFILE>(profile->profile_int, profile->query_sequence, NULL,
 															profile->mat, q->L, alphabetSize, 0, 0, q->L);
  	  	// create linear version of word profile
     	for (int32_t i = 0; i< alphabetSize; i++) {

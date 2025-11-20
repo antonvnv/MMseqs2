@@ -492,12 +492,16 @@ int search(int argc, const char **argv, const Command& command) {
         par.evalThr = (par.evalThr < par.evalProfile) ? par.evalThr  : par.evalProfile;
         for (int i = 0; i < par.numIterations; i++) {
             if (i == 0) {
-                par.forceCompBiasCorrection = true;
+                if (par.compBiasCorrection) {
+                    par.forceCompBiasCorrection = 1;
+                }
                 if ((searchMode & Parameters::SEARCH_MODE_FLAG_QUERY_PROFILE) == false) {
                     par.realign = true;
                 }
+                par.remapProfile = true;
             } else {
-                par.forceCompBiasCorrection = false;
+                par.forceCompBiasCorrection = 0;
+                par.remapProfile = false;
             }
             // if (i == 0 && (searchMode & Parameters::SEARCH_MODE_FLAG_TARGET_PROFILE) == false) {
             //     par.realign = true;
@@ -597,6 +601,8 @@ int search(int argc, const char **argv, const Command& command) {
         //     Debug(Debug::ERROR) << "No GPU support in nucleotide search\n";
         //     EXIT(EXIT_FAILURE);
         // }
+        par.forceCompBiasCorrection = 1;
+        par.remapProfile = true;
         FileUtil::writeFile(tmpDir + "/blastdi.sh", blastdi_sh, blastdi_sh_len);
         cmd.addVariable("EXTRACTQUERYPROFILES","TRUE");
         cmd.addVariable("SPLITSEQUENCE_PAR", par.createParameterString(par.splitsequence).c_str());

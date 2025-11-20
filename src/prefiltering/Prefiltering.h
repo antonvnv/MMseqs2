@@ -68,6 +68,7 @@ private:
     const std::string targetDB;
     const std::string targetDBIndex;
     DBReader<unsigned int> *qdbr;
+    DBReader<unsigned int> *qhdbr;
     DBReader<unsigned int> *tdbr;
     DBReader<unsigned int> *tidxdbr;
     bool sameQTDB;
@@ -106,6 +107,8 @@ private:
     const unsigned int diagonalScoring;
     const unsigned int minDiagScoreThr;
     bool aaBiasCorrection;
+    bool forceCompBias;
+    bool remapProfile;
     float aaBiasCorrectionScale;
     const float covThr;
     const int covMode;

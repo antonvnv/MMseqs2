@@ -339,7 +339,7 @@ void runFilterOnGpu(Parameters & par, BaseMatrix * subMat,
 void runFilterOnCpu(Parameters & par, BaseMatrix * subMat, int8_t * tinySubMat,
                     DBReader<unsigned int> * qdbr, DBReader<unsigned int> * qhdbr, DBReader<unsigned int> * tdbr,
                     SequenceLookup * sequenceLookup, bool sameDB, DBWriter & resultWriter, EvalueComputation * evaluer,
-                    QueryMatcherTaxonomyHook *taxonomyHook, int alignmentMode, bool forceCompBias){
+                    QueryMatcherTaxonomyHook *taxonomyHook, int alignmentMode){
     std::vector<hit_t> shortResults;
     shortResults.reserve(tdbr->getSize()/2);
     Debug::Progress progress(qdbr->getSize());
@@ -374,11 +374,10 @@ void runFilterOnCpu(Parameters & par, BaseMatrix * subMat, int8_t * tinySubMat,
             Orf::SequenceLocation qloc = Orf::parseOrfHeader(queryHeaderData);
             bool reverse = (qloc.strand == Orf::STRAND_PLUS) ? false : true;
 
-            // TODO: Need to make a new boolean parameter for remap, not forceCompBias
-            qSeq.mapSequence(id, queryKey, querySeqData, querySeqLen, forceCompBias, subMat, reverse);
+            qSeq.mapSequence(id, queryKey, querySeqData, querySeqLen, par.remapProfile, subMat, reverse, par.forceCompBiasCorrection, par.compBiasCorrectionScale);
 //            qSeq.printProfileStatePSSM();
             if(Parameters::isEqualDbtype(qSeq.getSeqType(), Parameters::DBTYPE_HMM_PROFILE) ){
-                aligner.ssw_init(&qSeq, qSeq.getAlignmentProfile(), subMat, forceCompBias, reverse);
+                aligner.ssw_init(&qSeq, qSeq.getAlignmentProfile(), subMat);
             }else{
                 aligner.ssw_init(&qSeq, tinySubMat, subMat);
             }
@@ -566,7 +565,7 @@ int prefilterInternal(int argc, const char **argv, const Command &command, int m
 #endif
     }else{
         runFilterOnCpu(par, subMat, tinySubMat, qdbr, qhdbr, tdbr, sequenceLookup, sameDB,
-                   resultWriter, evaluer, taxonomyHook,  mode, par.forceCompBiasCorrection);
+                   resultWriter, evaluer, taxonomyHook,  mode);
     }
 
     resultWriter.close();

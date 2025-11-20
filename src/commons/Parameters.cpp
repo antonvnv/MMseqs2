@@ -60,8 +60,9 @@ Parameters::Parameters():
         PARAM_SUB_MAT(PARAM_SUB_MAT_ID, "--sub-mat", "Substitution matrix", "Substitution matrix file", typeid(MultiParam<NuclAA<std::string>>), (void *) &scoringMatrixFile, "", MMseqsParameter::COMMAND_COMMON | MMseqsParameter::COMMAND_EXPERT),
         PARAM_SEED_SUB_MAT(PARAM_SEED_SUB_MAT_ID, "--seed-sub-mat", "Seed substitution matrix", "Substitution matrix file for k-mer generation", typeid(MultiParam<NuclAA<std::string>>), (void *) &seedScoringMatrixFile, "", MMseqsParameter::COMMAND_PREFILTER | MMseqsParameter::COMMAND_EXPERT),
         PARAM_NO_COMP_BIAS_CORR(PARAM_NO_COMP_BIAS_CORR_ID, "--comp-bias-corr", "Compositional bias", "Correct for locally biased amino acid composition (range 0-1)", typeid(int), (void *) &compBiasCorrection, "^[0-1]{1}$", MMseqsParameter::COMMAND_PREFILTER | MMseqsParameter::COMMAND_ALIGN | MMseqsParameter::COMMAND_PROFILE | MMseqsParameter::COMMAND_EXPERT),
-        PARAM_NO_FORCE_COMP_BIAS_CORR(PARAM_NO_FORCE_COMP_BIAS_CORR_ID, "--force-comp-bias-corr", "Force compositional bias", "Do the compositional bias correction even for profile", typeid(int), (void *) &forceCompBiasCorrection, "^[0-1]{1}$", MMseqsParameter::COMMAND_PREFILTER | MMseqsParameter::COMMAND_ALIGN | MMseqsParameter::COMMAND_PROFILE | MMseqsParameter::COMMAND_EXPERT),
+        PARAM_NO_FORCE_COMP_BIAS_CORR(PARAM_NO_FORCE_COMP_BIAS_CORR_ID, "--force-comp-bias-corr", "Force compositional bias", "Do the compositional bias correction even for profile (0 or 1)", typeid(int), (void *) &forceCompBiasCorrection, "^[0-1]{1}$", MMseqsParameter::COMMAND_PREFILTER | MMseqsParameter::COMMAND_ALIGN | MMseqsParameter::COMMAND_PROFILE | MMseqsParameter::COMMAND_EXPERT),
         PARAM_NO_COMP_BIAS_CORR_SCALE(PARAM_NO_COMP_BIAS_CORR_SCALE_ID, "--comp-bias-corr-scale", "Compositional bias scale", "Correct for locally biased amino acid composition (range 0-1)", typeid(float), (void *) &compBiasCorrectionScale,  "^0(\\.[0-9]+)?|^1(\\.0+)?$", MMseqsParameter::COMMAND_PREFILTER | MMseqsParameter::COMMAND_ALIGN | MMseqsParameter::COMMAND_PROFILE | MMseqsParameter::COMMAND_EXPERT),
+        PARAM_REMAP_PROFILE(PARAM_REMAP_PROFILE_ID, "--remap-profile", "Remap profile score", "Remap profile to the representative sequence", typeid(bool), (void *) &remapProfile, "", MMseqsParameter::COMMAND_PREFILTER | MMseqsParameter::COMMAND_ALIGN | MMseqsParameter::COMMAND_PROFILE | MMseqsParameter::COMMAND_EXPERT),
 
         PARAM_SPACED_KMER_MODE(PARAM_SPACED_KMER_MODE_ID, "--spaced-kmer-mode", "Spaced k-mers", "0: use consecutive positions in k-mers; 1: use spaced k-mers", typeid(int), (void *) &spacedKmer, "^[0-1]{1}", MMseqsParameter::COMMAND_PREFILTER | MMseqsParameter::COMMAND_EXPERT),
         PARAM_REMOVE_TMP_FILES(PARAM_REMOVE_TMP_FILES_ID, "--remove-tmp-files", "Remove temporary files", "Delete temporary files", typeid(bool), (void *) &removeTmpFiles, "", MMseqsParameter::COMMAND_COMMON | MMseqsParameter::COMMAND_EXPERT),
@@ -413,7 +414,9 @@ Parameters::Parameters():
     align.push_back(&PARAM_COV_MODE);
     align.push_back(&PARAM_MAX_SEQ_LEN);
     align.push_back(&PARAM_NO_COMP_BIAS_CORR);
+    align.push_back(&PARAM_NO_FORCE_COMP_BIAS_CORR);
     align.push_back(&PARAM_NO_COMP_BIAS_CORR_SCALE);
+    align.push_back(&PARAM_REMAP_PROFILE);
 
     align.push_back(&PARAM_MAX_REJECTED);
     align.push_back(&PARAM_MAX_ACCEPT);
@@ -451,6 +454,7 @@ Parameters::Parameters():
     prefilter.push_back(&PARAM_NO_COMP_BIAS_CORR);
     prefilter.push_back(&PARAM_NO_FORCE_COMP_BIAS_CORR);
     prefilter.push_back(&PARAM_NO_COMP_BIAS_CORR_SCALE);
+    prefilter.push_back(&PARAM_REMAP_PROFILE);
     prefilter.push_back(&PARAM_DIAGONAL_SCORING);
     prefilter.push_back(&PARAM_EXACT_KMER_MATCHING);
     prefilter.push_back(&PARAM_MASK_RESIDUES);
@@ -478,6 +482,7 @@ Parameters::Parameters():
     ungappedprefilter.push_back(&PARAM_NO_COMP_BIAS_CORR);
     ungappedprefilter.push_back(&PARAM_NO_FORCE_COMP_BIAS_CORR);
     ungappedprefilter.push_back(&PARAM_NO_COMP_BIAS_CORR_SCALE);
+    ungappedprefilter.push_back(&PARAM_REMAP_PROFILE);
     ungappedprefilter.push_back(&PARAM_MIN_DIAG_SCORE);
     ungappedprefilter.push_back(&PARAM_MAX_SEQS);
     ungappedprefilter.push_back(&PARAM_TAXON_LIST);
@@ -2470,8 +2475,9 @@ void Parameters::setDefaults() {
 
 #endif
     compBiasCorrection = 1;
-    forceCompBiasCorrection = 0;
+    forceCompBiasCorrection = 1;
     compBiasCorrectionScale = 1.0;
+    remapProfile = true;
     diagonalScoring = true;
     exactKmerMatching = 0;
     maskMode = 0;

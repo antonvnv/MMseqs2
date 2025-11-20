@@ -200,14 +200,14 @@ std::pair<const char *, unsigned int> Sequence::parseSpacedPattern(unsigned int 
     return std::make_pair<const char *, unsigned int>((const char *) pattern, spacedKmerPattern.size());
 }
 
-void Sequence::mapSequence(size_t id, unsigned int dbKey, const char *sequence, unsigned int seqLen, bool remap, BaseMatrix* alignSubMat, bool reverse) {
+void Sequence::mapSequence(size_t id, unsigned int dbKey, const char *sequence, unsigned int seqLen, bool remap, BaseMatrix* alignSubMat, bool reverse, bool forceCompBias, float scale) {
     this->id = id;
     this->dbKey = dbKey;
     this->seqData = sequence;
     if (Parameters::isEqualDbtype(this->seqType, Parameters::DBTYPE_AMINO_ACIDS) || Parameters::isEqualDbtype(this->seqType, Parameters::DBTYPE_NUCLEOTIDES)) {
         mapSequence(sequence, seqLen);
     } else if (Parameters::isEqualDbtype(this->seqType, Parameters::DBTYPE_HMM_PROFILE)) {
-        mapProfile(sequence, seqLen, remap, alignSubMat, reverse);
+        mapProfile(sequence, seqLen, remap, alignSubMat, reverse, forceCompBias, scale);
     } else {
         Debug(Debug::ERROR) << "Invalid sequence type!\n";
         EXIT(EXIT_FAILURE);
@@ -238,7 +238,7 @@ void Sequence::mapSequence(size_t id, unsigned int dbKey, std::pair<const unsign
     currItPos = -1;
 }
 
-void Sequence::mapProfile(const char * profileData, unsigned int seqLen, bool remap, BaseMatrix* alignSubMat, bool reverse) {
+void Sequence::mapProfile(const char * profileData, unsigned int seqLen, bool remap, BaseMatrix* alignSubMat, bool reverse, bool forceCompBias, float scale) {
     char * data = (char *) profileData;
     size_t currPos = 0;
     // if no data exists
@@ -279,21 +279,41 @@ void Sequence::mapProfile(const char * profileData, unsigned int seqLen, bool re
             Debug(Debug::INFO) << "Entry " << dbKey << " is longer than max seq. len " << maxLen << "\n";
         }
     }
+    // Get compositionBias if needed
+    float* compositionBias = new float[seqLen + 1];
+    // Fill with 0s
+    memset(compositionBias, 0, (seqLen + 1) * sizeof(float));
+    if (forceCompBias) {
+        SubstitutionMatrix::calcLocalAaBiasCorrection(subMat, numSequence, seqLen, compositionBias, scale, reverse);
+        // Add bias
+        size_t l = 0;
+        while (l < maxLen  && l < seqLen){
+            short bias = static_cast<short>((compositionBias[l] < 0.0) ? (compositionBias[l] - 0.5) : (compositionBias[l] + 0.5));
+            for (size_t aa_idx = 0; aa_idx < PROFILE_AA_SIZE; aa_idx++) {
+                profile_score[l * profile_row_size + aa_idx] += bias;
+            }
+            l++;
+        }
+        // Recalculate composition bias after adding bias
+        SubstitutionMatrix::calcLocalAaBiasCorrection(alignSubMat, numSequence, seqLen, compositionBias, scale, reverse);
+    }
 
     // create alignment profile
     if (remap) {
         if (reverse) {
             for (int i = 0; i < this->L; i++) {
                 unsigned char queryLetter = numSequence[i];
+                char bias = static_cast<char>((compositionBias[i] < 0.0) ? (compositionBias[i] - 0.5) : (compositionBias[i] + 0.5));
                 for (size_t aa_num = 0; aa_num < PROFILE_AA_SIZE; aa_num++) {
-                    profile_for_alignment[aa_num * this-> L + i] = alignSubMat->subMatrix[queryLetter][alignSubMat->revcomp[aa_num]]; // Already scaled
+                    profile_for_alignment[aa_num * this-> L + i] = alignSubMat->subMatrix[queryLetter][alignSubMat->revcomp[aa_num]] + bias; // Already scaled
                 }
             }
         } else {
             for (int i = 0; i < this->L; i++) {
                 unsigned char queryLetter = numSequence[i];
+                char bias = static_cast<char>((compositionBias[i] < 0.0) ? (compositionBias[i] - 0.5) : (compositionBias[i] + 0.5));
                 for (size_t aa_num = 0; aa_num < PROFILE_AA_SIZE; aa_num++) {
-                    profile_for_alignment[aa_num * this-> L + i] = alignSubMat->subMatrix[queryLetter][aa_num]; // Already scaled
+                    profile_for_alignment[aa_num * this-> L + i] = alignSubMat->subMatrix[queryLetter][aa_num] + bias; // Already scaled
                 }
             }
         }
@@ -323,6 +343,8 @@ void Sequence::mapProfile(const char * profileData, unsigned int seqLen, bool re
             memcpy(&profile_index[i * profile_row_size], &indexArray, PROFILE_AA_SIZE * sizeof(int));
         }
     }
+
+    delete[] compositionBias;
 }
 
 void Sequence::nextProfileKmer() {

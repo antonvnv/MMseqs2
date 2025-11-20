@@ -4,6 +4,7 @@
 #include "SubstitutionMatrixProfileStates.h"
 #include "DBWriter.h"
 #include "QueryMatcherTaxonomyHook.h"
+#include "Orf.h"
 
 #include "PatternCompiler.h"
 #include "FileUtil.h"
@@ -50,6 +51,8 @@ Prefiltering::Prefiltering(const std::string &queryDB,
         diagonalScoring(par.diagonalScoring),
         minDiagScoreThr(static_cast<unsigned int>(par.minDiagScoreThr)),
         aaBiasCorrection(par.compBiasCorrection != 0),
+        forceCompBias(par.forceCompBiasCorrection != 0),
+        remapProfile(par.remapProfile),
         aaBiasCorrectionScale(par.compBiasCorrectionScale),
         covThr(par.covThr), covMode(par.covMode), includeIdentical(par.includeIdentity),
         preloadMode(par.preloadMode),
@@ -187,6 +190,8 @@ Prefiltering::Prefiltering(const std::string &queryDB,
         qdbr = new DBReader<unsigned int>(queryDB.c_str(), queryDBIndex.c_str(), threads, DBReader<unsigned int>::USE_INDEX|DBReader<unsigned int>::USE_DATA);
         qdbr->open(DBReader<unsigned int>::LINEAR_ACCCESS);
     }
+    qhdbr = new DBReader<unsigned int>((queryDB + "_h").c_str(), (queryDB + "_h.index").c_str(), threads, DBReader<unsigned int>::USE_INDEX|DBReader<unsigned int>::USE_DATA);
+    qhdbr->open(DBReader<unsigned int>::LINEAR_ACCCESS);
     Debug(Debug::INFO) << "Query database size: " << qdbr->getSize() << " type: " << Parameters::getDbTypeName(querySeqType) << "\n";
 
     setupSplit(*tdbr, alphabetSize - 1, querySeqType,
@@ -242,6 +247,9 @@ Prefiltering::~Prefiltering() {
         qdbr->close();
         delete qdbr;
     }
+
+    qhdbr->close();
+    delete qhdbr;
 
     if (indexTable != NULL) {
         delete indexTable;
@@ -820,7 +828,12 @@ bool Prefiltering::runSplit(const std::string &resultDB, const std::string &resu
             // get query sequence
             char *seqData = qdbr->getData(id, thread_idx);
             unsigned int qKey = qdbr->getDbKey(id);
-            seq.mapSequence(id, qKey, seqData, qdbr->getSeqLen(id));
+            // Get the header
+            char *queryHeaderData = qhdbr->getData(id, thread_idx);
+            Orf::SequenceLocation qloc = Orf::parseOrfHeader(queryHeaderData);
+            bool reverse = (qloc.strand == Orf::STRAND_PLUS) ? false : true;
+
+            seq.mapSequence(id, qKey, seqData, qdbr->getSeqLen(id), remapProfile, ungappedSubMat, reverse, forceCompBias, aaBiasCorrectionScale);
             size_t targetSeqId = UINT_MAX;
             if (sameQTDB || includeIdentical) {
                 targetSeqId = tdbr->getId(seq.getDbKey());
@@ -1061,7 +1074,8 @@ int Prefiltering::getKmerThreshold(const float sensitivity, const bool isProfile
             EXIT(EXIT_FAILURE);
         }
     }
-    return static_cast<int>(kmerThrBest);
+    // return static_cast<int>(kmerThrBest);
+    return static_cast<int>(87);
 }
 
 size_t Prefiltering::estimateMemoryConsumption(int split, size_t dbSize, size_t resSize,

@@ -423,6 +423,7 @@ public:
     int    compBiasCorrection;           // Aminoacid composiont correction
     int    forceCompBiasCorrection;        // force composition correction even for profile
     float    compBiasCorrectionScale;    // Aminoacid composiont correction scale factor
+    bool   remapProfile;                // remap profile data to substitution matrix
 
     bool   diagonalScoring;              // switch diagonal scoring
     int    exactKmerMatching;            // only exact k-mer matching
@@ -814,6 +815,7 @@ public:
     PARAMETER(PARAM_NO_COMP_BIAS_CORR)
     PARAMETER(PARAM_NO_FORCE_COMP_BIAS_CORR)
     PARAMETER(PARAM_NO_COMP_BIAS_CORR_SCALE)
+    PARAMETER(PARAM_REMAP_PROFILE)
     PARAMETER(PARAM_SPACED_KMER_MODE)
     PARAMETER(PARAM_REMOVE_TMP_FILES)
     PARAMETER(PARAM_INCLUDE_IDENTITY)
