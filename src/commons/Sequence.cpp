@@ -336,9 +336,14 @@ void Sequence::mapProfile(const char * profileData, unsigned int seqLen, bool re
     // kmerSize != 0 => Prefilter
     if (this->kmerSize != 0) {
         // sort profile scores and index for KmerGenerator (prefilter step)
+        // Let's not use the 8 additional characters for non-canonical dinucleotides (16~)
         for (int i = 0; i < this->L; i++) {
             unsigned int indexArray[PROFILE_AA_SIZE] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
                                                         18, 19};
+            // Make the profile_score[i*profile_row_size + 16~] very small number to avoid being selected
+            for (size_t nonCanonicalIdx = 16; nonCanonicalIdx < PROFILE_AA_SIZE; nonCanonicalIdx++) {
+                profile_score[i * profile_row_size + nonCanonicalIdx] = -SHRT_MAX;
+            }
             Util::rankedDescSort20(&profile_score[i * profile_row_size], (unsigned int *) &indexArray);
             memcpy(&profile_index[i * profile_row_size], &indexArray, PROFILE_AA_SIZE * sizeof(int));
         }

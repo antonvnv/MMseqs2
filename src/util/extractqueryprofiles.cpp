@@ -29,8 +29,6 @@ void toBuffer(const char* pssm, const unsigned char* sequence, const unsigned ch
         result.push_back(static_cast<unsigned char>(sequence[pos]));
         result.push_back(static_cast<unsigned char>(consensus[pos]));
         result.push_back(static_cast<unsigned char>(MathUtil::convertNeffToChar(neffM[pos])));
-        result.push_back(static_cast<unsigned char>(0));
-        result.push_back(static_cast<unsigned char>(0));
         currPos += Sequence::PROFILE_READIN_SIZE;
     }
 }
@@ -134,13 +132,18 @@ int extractqueryprofiles(int argc, const char **argv, const Command& command) {
                 size_t currPos = 0, l = 0;
                 // for (size_t pos = 0; pos < seqLen; pos++) {
                 while (l < seqLen && l < maxSeqLength) {
-                    // Swap following position pairs: (1,15), (2,6), (4,12), (5,7), (8,9), (10,11)
+                    // Swap following position pairs: (1,15), (2,6), (4,12), (5,7), (8,9), (10,11), => canonical dinucleotides
+                    //                                (16,23), (17,22), (18,21), (19,20) => non-canonical dinucleotides
                     std::swap(data_cpy[currPos + 1], data_cpy[currPos + 15]);
                     std::swap(data_cpy[currPos + 2], data_cpy[currPos + 6]);
                     std::swap(data_cpy[currPos + 4], data_cpy[currPos + 12]);
                     std::swap(data_cpy[currPos + 5], data_cpy[currPos + 7]);
                     std::swap(data_cpy[currPos + 8], data_cpy[currPos + 9]);
                     std::swap(data_cpy[currPos + 10], data_cpy[currPos + 11]);
+                    std::swap(data_cpy[currPos + 16], data_cpy[currPos + 23]);
+                    std::swap(data_cpy[currPos + 17], data_cpy[currPos + 22]);
+                    std::swap(data_cpy[currPos + 18], data_cpy[currPos + 21]);
+                    std::swap(data_cpy[currPos + 19], data_cpy[currPos + 20]);
                     currPos += Sequence::PROFILE_READIN_SIZE;
                     l++;
                 }
@@ -190,13 +193,18 @@ int extractqueryprofiles(int argc, const char **argv, const Command& command) {
                     j_curr -= Sequence::PROFILE_READIN_SIZE;
                 }
                 for (size_t pos = 0; pos < seqLen; pos++) {
-                    // Swap following position pairs: (1,15), (2,6), (4,12), (5,7), (8,9), (10,11)
+                    // Swap following position pairs: (1,15), (2,6), (4,12), (5,7), (8,9), (10,11), => canonical dinucleotides
+                    //                                (16,23), (17,22), (18,21), (19,20) => non-canonical dinucleotides
                     std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 1], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 15]);
                     std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 2], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 6]);
                     std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 4], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 12]);
                     std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 5], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 7]);
                     std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 8], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 9]);
                     std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 10], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 11]);
+                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 16], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 23]);
+                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 17], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 22]);
+                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 18], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 21]);
+                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 19], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 20]);
                 }
                 toBuffer(profile_char, seq.numSequence, seq.numConsensusSequence, neffM, seqLen, result);
                 sequenceWriter.writeData(result.c_str(), result.length(), key, thread_idx);

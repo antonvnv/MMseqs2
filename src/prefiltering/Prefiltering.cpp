@@ -222,7 +222,7 @@ Prefiltering::Prefiltering(const std::string &queryDB,
         }
         _2merSubMatrix = getScoreMatrix(*kmerSubMat, 2);
         _3merSubMatrix = getScoreMatrix(*kmerSubMat, 3);
-        kmerSubMat->alphabetSize = alphabetSize; // Is it okay?
+        kmerSubMat->alphabetSize = alphabetSize;
     }
 
     if (splitMode == Parameters::QUERY_DB_SPLIT) {
