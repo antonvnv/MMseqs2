@@ -399,9 +399,30 @@ public:
         kmerHasX = 0;
 
         const simd_int xChar = simdi8_set(subMat->aa2num[static_cast<int>('X')]);
+        const simd_int tChar = simdi8_set(subMat->aa2num[static_cast<int>('T')]);
+        const simd_int vChar = simdi8_set(subMat->aa2num[static_cast<int>('V')]);
+        const simd_int wChar = simdi8_set(subMat->aa2num[static_cast<int>('W')]);
+        const simd_int yChar = simdi8_set(subMat->aa2num[static_cast<int>('Y')]);
+        const simd_int bChar = simdi8_set(subMat->aa2num[static_cast<int>('B')]);
+        const simd_int jChar = simdi8_set(subMat->aa2num[static_cast<int>('J')]);
+        const simd_int oChar = simdi8_set(subMat->aa2num[static_cast<int>('O')]);
+        const simd_int uChar = simdi8_set(subMat->aa2num[static_cast<int>('U')]);
         for(size_t i = 0; i < simdKmerRegisterCnt; i++){
             simd_int kmer = simdi_load((((simd_int *) kmerWindow) + i));
-            kmerHasX |= static_cast<unsigned int>(simdi8_movemask(simdi8_eq(kmer, xChar)));
+
+            // Compare against all 9 characters, accumulating matches in one SIMD register
+            simd_int match = simdi8_eq(kmer, xChar);
+            match = simdi_or(match, simdi8_eq(kmer, tChar));
+            match = simdi_or(match, simdi8_eq(kmer, vChar));
+            match = simdi_or(match, simdi8_eq(kmer, wChar));
+            match = simdi_or(match, simdi8_eq(kmer, yChar));
+            match = simdi_or(match, simdi8_eq(kmer, bChar));
+            match = simdi_or(match, simdi8_eq(kmer, jChar));
+            match = simdi_or(match, simdi8_eq(kmer, oChar));
+            match = simdi_or(match, simdi8_eq(kmer, uChar));
+
+            // kmerHasX |= static_cast<unsigned int>(simdi8_movemask(simdi8_eq(kmer, xChar)));
+            kmerHasX |= static_cast<unsigned int>(simdi8_movemask(match));
         }
         if (Parameters::isEqualDbtype(seqType, Parameters::DBTYPE_HMM_PROFILE)) {
             nextProfileKmer();
@@ -459,18 +480,13 @@ public:
 #endif
     // const size_t PROFILE_ROW_SIZE = (((size_t) PROFILE_AA_SIZE / (VECSIZE_INT * 4)) + 1) * (VECSIZE_INT * 4);
     size_t profile_row_size;
-    static const size_t PROFILE_AA_SIZE = 20;
-    static const size_t PROFILE_CONSENSUS = 21;     // new
-    static const size_t PROFILE_NEFF = 22;          // new
-#ifdef GAP_POS_SCORING
-    static const size_t PROFILE_GAP_DEL = 23;       // new
-    static const size_t PROFILE_GAP_INS = 24;       // new
-#else
-    static const size_t PROFILE_GAP_RESERVED1 = 23;
-    static const size_t PROFILE_GAP_RESERVED2 = 24;
-#endif
+    static const size_t PROFILE_AA_SIZE = 24;
+    static const size_t PROFILE_CONSENSUS = 25;     // new
+    static const size_t PROFILE_NEFF = 26;          // new
+    // static const size_t PROFILE_GAP_RESERVED1 = 23;
+    // static const size_t PROFILE_GAP_RESERVED2 = 24;
     // 20 AA, 1 query, 1 consensus, 1 Neff M, 2 gap penalties
-    static const size_t PROFILE_READIN_SIZE = 25;
+    static const size_t PROFILE_READIN_SIZE = 27;
     ScoreMatrix **profile_matrix;
     // Memory layout of this profile is qL * AA
     //   Query length

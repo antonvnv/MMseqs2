@@ -82,6 +82,10 @@ Prefiltering::Prefiltering(const std::string &queryDB,
             Debug(Debug::ERROR) << "Query sequence type not implemented!\n";
             EXIT(EXIT_FAILURE);
     }
+    // If the submat is dinuc.out, make alphabetSize to 17
+    if (scoringMatrixFile.values.aminoacid().find("dinuc.out") != std::string::npos) {
+        alphabetSize = 17; // including X
+    }
 
     if (Parameters::isEqualDbtype(FileUtil::parseDbType(targetDB.c_str()), Parameters::DBTYPE_INDEX_DB)) {
         if (preloadMode == Parameters::PRELOAD_MODE_AUTO) {
@@ -213,9 +217,12 @@ Prefiltering::Prefiltering(const std::string &queryDB,
 
     if (Parameters::isEqualDbtype(querySeqType, Parameters::DBTYPE_AMINO_ACIDS)) {
         kmerSubMat->alphabetSize = kmerSubMat->alphabetSize - 1;
+        if (scoringMatrixFile.values.aminoacid().find("dinuc.out") != std::string::npos) {
+            kmerSubMat->alphabetSize = 16; // without X
+        }
         _2merSubMatrix = getScoreMatrix(*kmerSubMat, 2);
         _3merSubMatrix = getScoreMatrix(*kmerSubMat, 3);
-        kmerSubMat->alphabetSize = alphabetSize;
+        kmerSubMat->alphabetSize = alphabetSize; // Is it okay?
     }
 
     if (splitMode == Parameters::QUERY_DB_SPLIT) {
