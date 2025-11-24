@@ -2,6 +2,7 @@
 #define BASE_MATRIX_H
 
 #include <string>
+#include <vector>
 
 class BaseMatrix{
 public:
@@ -55,11 +56,13 @@ public:
 
     void initMatrixMemory(int alphSize);
 
+    static std::vector<size_t> returnCanonicalIndices(size_t index);
+
     // generate the substitution matrix given the probability matrix, background probabilities and the alphabet size
-    static void generateSubMatrix(double ** probMatrix, double ** subMatrix, float ** subMatrixPseudoCounts, int size, bool containsX);
+    static void generateSubMatrix(double ** probMatrix, double ** subMatrix, float ** subMatrixPseudoCounts, int size, bool containsX, std::string matrixName = "");
 
     // generate a short data type substitution matrix
-    void generateSubMatrix(double ** probMatrix, float ** subMatrixPseudoCounts, short ** subMatrix, int size, bool containsX, double bitFactor = 1.0, double scoringBias = 0.0);
+    void generateSubMatrix(double ** probMatrix, float ** subMatrixPseudoCounts, short ** subMatrix, int size, bool containsX, double bitFactor = 1.0, double scoringBias = 0.0, std::string matrixName = "");
 
     virtual double getBackgroundProb(size_t aa_index);
 

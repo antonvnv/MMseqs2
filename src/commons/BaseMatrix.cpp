@@ -6,6 +6,7 @@
 #include "Util.h"
 #include "MathUtil.h"
 #include "Sequence.h"
+#include <vector>
 
 const double BaseMatrix::ANY_BACK = 1E-5;
 
@@ -18,13 +19,13 @@ BaseMatrix::BaseMatrix(){
         aa2num[i] = UCHAR_MAX;
     }
     // Reverse complement table for dinucleotides
-    revcomp = new unsigned char[21];
-    for (int i = 0; i < 21; ++i) {
+    revcomp = new unsigned char[25];
+    for (int i = 0; i < 25; ++i) {
         revcomp[i] = static_cast<unsigned char>('X');
     }
     // To handle the last incomplete dinucleotide
-    tail = new unsigned char[21];
-    for (int i = 0; i < 21; ++i) {
+    tail = new unsigned char[25];
+    for (int i = 0; i < 25; ++i) {
         tail[i] = static_cast<unsigned char>('X');
     }
 }
@@ -119,8 +120,45 @@ void BaseMatrix::computeBackground(double ** probMat, double * pBack, int alphab
 
 }
 
+std::vector<size_t> BaseMatrix::returnCanonicalIndices(size_t index) {
+    std::vector<size_t> indices;
+    switch (index) {
+        case 16: // AX
+            indices = {0, 1, 2, 3};
+            break;
+        case 17: // CX
+            indices = {4, 5, 6, 7};
+            break;
+        case 18: // GX
+            indices = {8, 9, 10, 11};
+            break;
+        case 19: // TX/UX
+            indices = {12, 13, 14, 15};
+            break;
+        case 20: // XA
+            indices = {0, 4, 8, 12};
+            break;
+        case 21: // XC
+            indices = {1, 5, 9, 13};
+            break;
+        case 22: // XG
+            indices = {2, 6, 10, 14};
+            break;
+        case 23: // XU/T
+            indices = {3, 7, 11, 15};
+            break;
+        case 24: // XX
+            indices = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+            break;
+        default:
+            Debug(Debug::ERROR) << "Unexpected index for dinucleotide matrix\n";
+            EXIT(EXIT_FAILURE);
+    }
+    return indices;
+}
+
 void BaseMatrix::generateSubMatrix(double ** probMatrix, double ** subMatrix, float ** subMatrixPseudoCounts,
-                                   int size, bool containsX) {
+                                   int size, bool containsX, std::string matrixName) {
 
     // calculate background distribution for the amino acids
     double *pBack = new double[size];
@@ -141,6 +179,42 @@ void BaseMatrix::generateSubMatrix(double ** probMatrix, double ** subMatrix, fl
 
         }
     }
+
+    // If the matrixName is dinuc.out, recalculate the non-canonical dinucleotide scores
+    if ("dinuc.out" == matrixName) {
+        std::vector<size_t> dinucs_row, dinucs_col;
+        // Without 'XX'
+        for (int i = 16; i < size; i++) {
+            // Get the indexes that has the same canonical nucleotides (i.e. "AA", "AC", "AG", "AU/T" for "AX", etc.)
+            dinucs_row = returnCanonicalIndices(i);
+            for (int j = 0; j < size; j++) {
+                dinucs_col.clear();
+                if (j > 15) {
+                    dinucs_col = returnCanonicalIndices(j);
+                }
+                // If dinucs_col is empty
+                if (dinucs_col.size() == 0) {
+                    // j <= 15
+                    double score_sum = 0.0;
+                    for (size_t row_idx : dinucs_row) {
+                        score_sum += subMatrix[row_idx][j];
+                    }
+                    subMatrix[i][j] = score_sum / static_cast<double>(dinucs_row.size());
+                    subMatrix[j][i] = subMatrix[i][j];
+                } else {
+                    double score_sum = 0.0;
+                    for (size_t row_idx : dinucs_row) {
+                        for (size_t col_idx : dinucs_col) {
+                            score_sum += subMatrix[row_idx][col_idx];
+                        }
+                    }
+                    subMatrix[i][j] = score_sum / static_cast<double>(dinucs_row.size() * dinucs_col.size());
+                    subMatrix[j][i] = subMatrix[i][j];
+                }
+            }
+        }
+    }
+
     delete[] pBack;
 //    subMatrix[size - 1][size - 1] = -.7;
 //    for (int i = 0; i < size; i++) {
@@ -150,12 +224,12 @@ void BaseMatrix::generateSubMatrix(double ** probMatrix, double ** subMatrix, fl
 }
 
 // made non-static for testing purpose
-void BaseMatrix::generateSubMatrix(double ** probMatrix, float ** subMatrixPseudoCounts, short ** subMatrix, int size, bool containsX, double bitFactor, double scoringBias){
+void BaseMatrix::generateSubMatrix(double ** probMatrix, float ** subMatrixPseudoCounts, short ** subMatrix, int size, bool containsX, double bitFactor, double scoringBias, std::string matrixName){
     double** sm = new double* [size];
     for (int i = 0; i < size; i++)
         sm[i] = new double[size];
 
-    generateSubMatrix(probMatrix, sm, subMatrixPseudoCounts, size, containsX);
+    generateSubMatrix(probMatrix, sm, subMatrixPseudoCounts, size, containsX, matrixName);
 
     // convert to short data type matrix
     for (int i = 0; i < size; i++){
