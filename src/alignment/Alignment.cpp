@@ -349,7 +349,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
                     }
 
                     // Get the header
-                    char *queryHeaderData = qhdbr->getData(id, thread_idx);
+                    char *queryHeaderData = qhdbr->getData(qId, thread_idx);
                     Orf::SequenceLocation qloc = Orf::parseOrfHeader(queryHeaderData);
                     bool reverse = (qloc.strand == Orf::STRAND_PLUS) ? false : true;
 
@@ -559,7 +559,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
 }
 
 size_t Alignment::estimateHDDMemoryConsumption(int dbSize, int maxSeqs) {
-    return 2 * (dbSize * maxSeqs * 21 * 1.75);
+    return 2 * (dbSize * maxSeqs * 25 * 1.75);
 }
 
 bool Alignment::checkCriteria(Matcher::result_t &res, bool isIdentity, double evalThr, double seqIdThr, int alnLenThr, int covMode, float covThr) {
