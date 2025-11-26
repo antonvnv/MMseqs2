@@ -195,7 +195,8 @@ public:
         const int covMode,
         const float covThr,
         const float correlationScoreWeight,
-        const int32_t maskLen);
+        const int32_t maskLen,
+        const bool reverse=false);
 
     template <unsigned int type>
     s_align alignStartPosBacktraceBlock(
@@ -215,7 +216,7 @@ public:
                         const double filters,
                         EvalueComputation * filterd,
                         const int covMode, const float covThr, const float correlationScoreWeight,
-                        const int32_t maskLen);
+                        const int32_t maskLen, const bool reverse=false);
 
 
     /*!	@function computed ungapped alignment score
@@ -324,7 +325,7 @@ private:
                         const double filters,
                         EvalueComputation * filterd,
                         const int covMode, const float covThr, const float correlationScoreWeight,
-                        const int32_t maskLen);
+                        const int32_t maskLen, const bool reverse=false);
 
     /* Striped Smith-Waterman
      Record the highest score of each reference position.
@@ -375,7 +376,7 @@ private:
                                     const int8_t * compositionBias,
                                     int32_t db_length, int32_t query_length, int32_t queryStart,
                                     int32_t score, const uint32_t gap_open, const uint32_t gap_extend,
-                                    int32_t band_width, const int8_t *mat, const int32_t qry_n);
+                                    int32_t band_width, const int8_t *mat, const int32_t qry_n, const bool reverse=false);
 
 
     /*!	@function		Produce CIGAR 32-bit unsigned integer from CIGAR operation and CIGAR length

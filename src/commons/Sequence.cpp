@@ -348,6 +348,47 @@ void Sequence::mapProfile(const char * profileData, unsigned int seqLen, bool re
     delete[] compositionBias;
 }
 
+void Sequence::remapProfile(unsigned int seqLen, BaseMatrix* alignSubMat, bool reverse, bool forceCompBias, float scale) {
+    // remap only happens in alignment, we don't need profile_score
+    // Only remap profile_for_alignment
+
+    // Get compositionBias if needed
+    float* compositionBias = new float[seqLen + 1];
+    // Fill with 0s
+    memset(compositionBias, 0, (seqLen + 1) * sizeof(float));
+    if (forceCompBias) {
+        // Calculate composition bias after adding bias
+        SubstitutionMatrix::calcLocalAaBiasCorrection(alignSubMat, numSequence, seqLen, compositionBias, scale, reverse);
+    }
+
+    // create alignment profile
+    if (reverse) {
+        for (int i = 0; i < this->L; i++) {
+            unsigned char queryLetter = numSequence[i];
+            char bias = static_cast<char>((compositionBias[i] < 0.0) ? (compositionBias[i] - 0.5) : (compositionBias[i] + 0.5));
+            for (size_t aa_num = 0; aa_num < PROFILE_AA_SIZE; aa_num++) {
+                profile_for_alignment[aa_num * this-> L + i] = alignSubMat->subMatrix[queryLetter][alignSubMat->revcomp[aa_num]] + bias; // Already scaled
+            }
+        }
+    } else {
+        for (int i = 0; i < this->L; i++) {
+            unsigned char queryLetter = numSequence[i];
+            char bias = static_cast<char>((compositionBias[i] < 0.0) ? (compositionBias[i] - 0.5) : (compositionBias[i] + 0.5));
+            for (size_t aa_num = 0; aa_num < PROFILE_AA_SIZE; aa_num++) {
+                profile_for_alignment[aa_num * this-> L + i] = alignSubMat->subMatrix[queryLetter][aa_num] + bias; // Already scaled
+            }
+        }
+    }
+    // set the X value to 0
+    if(subMat->alphabetSize - PROFILE_AA_SIZE != 0){
+        memset(&profile_for_alignment[(subMat->alphabetSize-1) * this-> L], 0, this->L); // X (24)
+    }
+
+    
+
+    delete[] compositionBias;
+}
+
 void Sequence::nextProfileKmer() {
     int pos = 0;
     for (int i = 0; i < spacedPatternSize; i++) {

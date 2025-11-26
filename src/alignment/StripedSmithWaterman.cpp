@@ -226,15 +226,15 @@ s_align SmithWaterman::ssw_align (
         const double  evalueThr,
         EvalueComputation * evaluer,
         const int covMode, const float covThr, const float correlationScoreWeight,
-        const int32_t maskLen) {
+        const int32_t maskLen, const bool reverse) {
     s_align alignment;
     // check if both query and target are profiles
 	if (profile->isProfile) {
         alignment = ssw_align_private<SmithWaterman::PROFILE_SEQ>(db_num_sequence, db_length, backtrace, gap_open,
-                                                                  gap_extend, alignmentMode, evalueThr, evaluer, covMode, covThr, correlationScoreWeight, maskLen);
+                                                                  gap_extend, alignmentMode, evalueThr, evaluer, covMode, covThr, correlationScoreWeight, maskLen, reverse);
     } else {
         alignment = ssw_align_private<SmithWaterman::SEQ_SEQ>(db_num_sequence, db_length, backtrace, gap_open,
-                                                              gap_extend, alignmentMode, evalueThr, evaluer, covMode, covThr, correlationScoreWeight, maskLen);
+                                                              gap_extend, alignmentMode, evalueThr, evaluer, covMode, covThr, correlationScoreWeight, maskLen, reverse);
     }
     return alignment;
 }
@@ -251,7 +251,7 @@ s_align SmithWaterman::ssw_align_private (
 	const double  evalueThr,
 	EvalueComputation * evaluer,
 	const int covMode, const float covThr, const float correlationScoreWeight,
-	const int32_t maskLen) {
+	const int32_t maskLen, const bool reverse) {
 
 	int32_t query_length = profile->query_length;
 
@@ -277,7 +277,7 @@ s_align SmithWaterman::ssw_align_private (
 	// run very shot and long overflowing alignments with SW instead of block aligner
 	// short alignments are very fast with byte SW, long alignments produce slightly different scores FIXME
 	if (true || align.word != 1) {
-		return alignStartPosBacktrace<type>(db_sequence, db_length, gap_open, gap_extend, alignmentMode, backtrace, align, evaluer, covMode, covThr, correlationScoreWeight, maskLen);
+		return alignStartPosBacktrace<type>(db_sequence, db_length, gap_open, gap_extend, alignmentMode, backtrace, align, evaluer, covMode, covThr, correlationScoreWeight, maskLen, reverse);
 	}
 
 	bool blockAlignFailed = false;
@@ -550,7 +550,8 @@ s_align SmithWaterman::alignStartPosBacktrace (
 		EvalueComputation * evaluer,
         const int covMode, const float covThr,
 		const float correlationScoreWeight,
-        const int32_t maskLen) {
+        const int32_t maskLen,
+	    const bool reverse) {
     int32_t query_length = profile->query_length;
     int32_t queryOffset = query_length - r.qEndPos1 - 1;
 
@@ -638,11 +639,11 @@ s_align SmithWaterman::alignStartPosBacktrace (
     if (type == PROFILE_SEQ) {
         path = banded_sw<type>(db_sequence + r.dbStartPos1, profile->query_sequence + r.qStartPos1, profile->composition_bias + r.qStartPos1, db_length,
 							   query_length, r.qStartPos1, r.score1, gap_open, gap_extend,
-							   band_width, profile->mat, profile->query_length);
+							   band_width, profile->mat, profile->query_length, reverse);
 	} else {
         path = banded_sw<type>(db_sequence + r.dbStartPos1, profile->query_sequence + r.qStartPos1, profile->composition_bias + r.qStartPos1, db_length,
 							   query_length, r.qStartPos1, r.score1, gap_open, gap_extend,
-							   band_width, profile->mat, profile->alphabetSize);
+							   band_width, profile->mat, profile->alphabetSize, reverse);
 		db_length = r.dbEndPos1 - r.dbStartPos1 + 1;
 		query_length = r.qEndPos1 - r.qStartPos1 + 1;
 		band_width = abs(db_length - query_length) + 1;
@@ -670,9 +671,9 @@ s_align SmithWaterman::alignStartPosBacktrace (
 }
 
 template
-s_align SmithWaterman::ssw_align_private<SmithWaterman::SEQ_SEQ>(const unsigned char*, int32_t, std::string&, const uint8_t, const uint8_t, const uint8_t, const double, EvalueComputation*, const int, const float, const float, const int32_t);
+s_align SmithWaterman::ssw_align_private<SmithWaterman::SEQ_SEQ>(const unsigned char*, int32_t, std::string&, const uint8_t, const uint8_t, const uint8_t, const double, EvalueComputation*, const int, const float, const float, const int32_t, const bool);
 template
-s_align SmithWaterman::ssw_align_private<SmithWaterman::PROFILE_SEQ>(const unsigned char*, int32_t, std::string&, const uint8_t, const uint8_t, const uint8_t, const double, EvalueComputation*, const int, const float, const float, const int32_t);
+s_align SmithWaterman::ssw_align_private<SmithWaterman::PROFILE_SEQ>(const unsigned char*, int32_t, std::string&, const uint8_t, const uint8_t, const uint8_t, const double, EvalueComputation*, const int, const float, const float, const int32_t, const bool);
 
 template
 s_align SmithWaterman::alignScoreEndPos<SmithWaterman::SEQ_SEQ>(const unsigned char*, int32_t, const uint8_t, const uint8_t, const int32_t);
@@ -685,9 +686,9 @@ template
 s_align SmithWaterman::alignStartPosBacktraceBlock<SmithWaterman::PROFILE_SEQ>(const unsigned char*, int32_t, const uint8_t, const uint8_t, std::string&, s_align);
 
 template
-s_align SmithWaterman::alignStartPosBacktrace<SmithWaterman::SEQ_SEQ>(const unsigned char*, int32_t, const uint8_t, const uint8_t, const uint8_t, std::string&, s_align, EvalueComputation*, const int, const float, const float, const int32_t);
+s_align SmithWaterman::alignStartPosBacktrace<SmithWaterman::SEQ_SEQ>(const unsigned char*, int32_t, const uint8_t, const uint8_t, const uint8_t, std::string&, s_align, EvalueComputation*, const int, const float, const float, const int32_t, const bool);
 template
-s_align SmithWaterman::alignStartPosBacktrace<SmithWaterman::PROFILE_SEQ>(const unsigned char*, int32_t, const uint8_t, const uint8_t, const uint8_t, std::string&, s_align, EvalueComputation*, const int, const float, const float, const int32_t);
+s_align SmithWaterman::alignStartPosBacktrace<SmithWaterman::PROFILE_SEQ>(const unsigned char*, int32_t, const uint8_t, const uint8_t, const uint8_t, std::string&, s_align, EvalueComputation*, const int, const float, const float, const int32_t, const bool);
 
 void SmithWaterman::computerBacktrace(s_profile * query, const unsigned char * db_sequence,
                                       s_align & alignment, std::string & backtrace,
@@ -1444,7 +1445,7 @@ SmithWaterman::cigar * SmithWaterman::banded_sw(const unsigned char *db_sequence
 												int32_t score, const uint32_t gap_open,
 												const uint32_t gap_extend,
 												int32_t band_width, const int8_t *mat,
-												const int32_t qry_n) {
+												const int32_t qry_n, const bool reverse) {
 #define kroundup32(x) (--(x), (x)|=(x)>>1, (x)|=(x)>>2, (x)|=(x)>>4, (x)|=(x)>>8, (x)|=(x)>>16, ++(x))
 
     /* Convert the coordinate in the scoring matrix into the coordinate in one line of the band. */
@@ -1500,6 +1501,10 @@ SmithWaterman::cigar * SmithWaterman::banded_sw(const unsigned char *db_sequence
 
 			for (j = beg; LIKELY(j <= end); j ++) {
 				int32_t b, e1, f1, d, de, df, dh;
+				
+				// REVERSE-ORIENT: index for query from the end (original coordinate)
+				int32_t qi = query_length - 1 - i;
+
 				set_u(u, band_width, i, j);
 				set_u(e, band_width, i - 1, j);
 				set_u(b, band_width, i, j - 1);
@@ -1523,12 +1528,23 @@ SmithWaterman::cigar * SmithWaterman::banded_sw(const unsigned char *db_sequence
 
 				temp1 = e1 > f1 ? e1 : f1;
 
+				// REVERSE-ORIENT: index for target from the end (original coordinate)
+                int32_t dj = db_length - 1 - j;
+
 				//TODO: careful with the variable names
 				if (type == PROFILE_SEQ) {
 				    // db_sequence is a numerical sequence
-                    temp2 = h_b[d] + mat[db_sequence[j] * qry_n + (queryStart + i)];
+					if (reverse) {
+						temp2 = h_b[d] + mat[db_sequence[dj] * qry_n + (queryStart + qi)];
+					} else {
+                    	temp2 = h_b[d] + mat[db_sequence[j] * qry_n + (queryStart + i)];
+					}
                 } else {
-                    temp2 = h_b[d] + mat[query_sequence[i] * qry_n + db_sequence[j]] + compositionBias[i];
+					if (reverse) {
+						temp2 = h_b[d] + mat[query_sequence[qi] * qry_n + db_sequence[dj]] + compositionBias[qi];
+					} else {
+                    	temp2 = h_b[d] + mat[query_sequence[i] * qry_n + db_sequence[j]] + compositionBias[i];
+					}
 				}
 
 				h_c[u] = temp1 > temp2 ? temp1 : temp2;
@@ -1630,15 +1646,22 @@ SmithWaterman::cigar * SmithWaterman::banded_sw(const unsigned char *db_sequence
 		c[l - 1] = to_cigar_int(1, 'M');
 	}
 
-	// reverse cigar
 	c1 = (uint32_t*)new uint32_t[l * sizeof(uint32_t)];
-	s = 0;
-	e = l - 1;
-	while (LIKELY(s <= e)) {
-		c1[s] = c[e];
-		c1[e] = c[s];
-		++ s;
-		-- e;
+	if (!reverse) {
+		// reverse cigar
+		s = 0;
+		e = l - 1;
+		while (LIKELY(s <= e)) {
+			c1[s] = c[e];
+			c1[e] = c[s];
+			++ s;
+			-- e;
+		}
+	} else {
+		// copy cigar
+		for (i = 0; LIKELY(i < l); i ++) {
+			c1[i] = c[i];
+		}
 	}
 	result->seq = c1;
 	result->length = l;

@@ -90,6 +90,9 @@ public:
     // map profile HMM, *data points to start position of Profile
     void mapProfile(const char *profileData, unsigned int seqLen, bool remap=false, BaseMatrix* alignSubMat=NULL, bool reverse=false, bool forceCompBias=false, float scale=1.0f);
 
+    // remap profile for realign
+    void remapProfile(unsigned int seqLen, BaseMatrix* alignSubMat, bool reverse, bool forceCompBias, float scale);
+
     // checks if there is still a k-mer left
     bool hasNextKmer() {
         return (((currItPos + 1) + this->spacedPatternSize) <= this->L);
@@ -480,6 +483,7 @@ public:
 #endif
     // const size_t PROFILE_ROW_SIZE = (((size_t) PROFILE_AA_SIZE / (VECSIZE_INT * 4)) + 1) * (VECSIZE_INT * 4);
     size_t profile_row_size;
+    static const size_t PROFILE_CANON_DINUC_SIZE = 16;
     static const size_t PROFILE_AA_SIZE = 24;
     static const size_t PROFILE_CONSENSUS = 25;     // new
     static const size_t PROFILE_NEFF = 26;          // new

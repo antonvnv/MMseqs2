@@ -330,6 +330,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
                 data = origData = prefdbr->getData(id, thread_idx);
                 unsigned int queryDbKey = prefdbr->getDbKey(id);
                 size_t origQueryLen = 0;
+                bool reverse = false;
                 // only load query data if data != \0
                 if (*data != '\0') {
                     size_t qId = qdbr->getId(queryDbKey);
@@ -351,7 +352,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
                     // Get the header
                     char *queryHeaderData = qhdbr->getData(qId, thread_idx);
                     Orf::SequenceLocation qloc = Orf::parseOrfHeader(queryHeaderData);
-                    bool reverse = (qloc.strand == Orf::STRAND_PLUS) ? false : true;
+                    reverse = (qloc.strand == Orf::STRAND_PLUS) ? false : true;
 
                     qSeq.mapSequence(qId, queryDbKey, querySeqData, queryLen, remapProfile, m, reverse, forceCompBias, compBiasCorrectionScale);
                     matcher.initQuery(&qSeq);
@@ -393,7 +394,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
 
                     // calculate Smith-Waterman alignment
 
-                    Matcher::result_t res = matcher.getSWResult(&dbSeq, static_cast<int>(diagonal), isReverse, covMode, covThr, evalThr, swMode, seqIdMode, isIdentity, wrappedScoring);
+                    Matcher::result_t res = matcher.getSWResult(&dbSeq, static_cast<int>(diagonal), isReverse, covMode, covThr, evalThr, swMode, seqIdMode, isIdentity, wrappedScoring, reverse);
                     alignmentsNum++;
 
                     if (isIdentity) {
@@ -423,6 +424,11 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
 
                 std::vector<Matcher::result_t> *returnRes = &swResults;
                 if (realign == true && *origData != '\0') {
+                    // If it is a first iteration, remap the qSeq
+                    // remapProfile is true if it is a first iteration
+                    if (remapProfile && Parameters::isEqualDbtype(qSeq.getSequenceType(), Parameters::DBTYPE_HMM_PROFILE)) {
+                        qSeq.remapProfile(qSeq.L, realign_m, reverse, forceCompBias, compBiasCorrectionScale);
+                    }
                     realigner->initQuery(&qSeq);
                     int realignAccepted = 0;
                     for (size_t result = 0; result < swResults.size() && realignAccepted < realignMaxSeqs; result++) {
