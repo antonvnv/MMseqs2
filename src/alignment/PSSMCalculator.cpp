@@ -257,18 +257,61 @@ void PSSMCalculator::profileToString(std::string& result, size_t queryLength){
 }
 
 void PSSMCalculator::computeLogPSSM(BaseMatrix *subMat, char *pssm, const float *profile, float bitFactor, size_t queryLength, float scoreBias) {
+    // Initialize fPssm
+    float *fPssm = new float[queryLength * Sequence::PROFILE_AA_SIZE];
     for(size_t pos = 0; pos < queryLength; pos++) {
-        for(size_t aa = 0; aa < Sequence::PROFILE_AA_SIZE; aa++) {
+        size_t aa = 0;
+        for(;aa < Sequence::PROFILE_CANON_DINUC_SIZE; aa++) {
             const float aaProb = profile[pos * Sequence::PROFILE_AA_SIZE + aa];
             const unsigned int idx = pos * Sequence::PROFILE_AA_SIZE + aa;
             float logProb = MathUtil::flog2(aaProb / subMat->pBack[aa]);
             float pssmVal = bitFactor * logProb + bitFactor * scoreBias;
+            fPssm[idx] = pssmVal;
+            pssmVal = static_cast<char>((pssmVal < 0.0) ? pssmVal - 0.5 : pssmVal + 0.5);
+            float truncPssmVal =  std::min(pssmVal, 127.0f);
+            truncPssmVal       =  std::max(-128.0f, truncPssmVal);
+            pssm[idx] = truncPssmVal;
+        }
+        // 8 non-canonical dinucleotides, average from canonical ones
+        for(;aa < Sequence::PROFILE_AA_SIZE; aa++) {
+            const unsigned int idx = pos * Sequence::PROFILE_AA_SIZE + aa;
+            float pssmVal = 0.0f;
+            switch (aa) {
+                case 16: // AX, average over all A* (C, G, L, Q)
+                    pssmVal = (fPssm[1] + fPssm[5] + fPssm[9] + fPssm[13]) / 4.0f;
+                    break;
+                case 17: // CX, average over all C* (D, F, R, K)
+                    pssmVal = (fPssm[2] + fPssm[4] + fPssm[8] + fPssm[14]) / 4.0f;
+                    break;
+                case 18: // GX, average over all G* (M, A, P, I)
+                    pssmVal = (fPssm[0] + fPssm[7] + fPssm[10] + fPssm[12]) / 4.0f;
+                    break;
+                case 19: // UX, average over all U* (E, N, H, S)
+                    pssmVal = (fPssm[3] + fPssm[6] + fPssm[11] + fPssm[15]) / 4.0f;
+                    break;
+                case 20: // XA, average over all *A (C, D, M, E)
+                    pssmVal = (fPssm[1] + fPssm[2] + fPssm[3] + fPssm[10]) / 4.0f;
+                    break;
+                case 21: // XC, average over all *C (G, F, A, N)
+                    pssmVal = (fPssm[0] + fPssm[4] + fPssm[5] + fPssm[11]) / 4.0f;
+                    break;
+                case 22: // XG, average over all *G (L, R, P, H)
+                    pssmVal = (fPssm[6] + fPssm[9] + fPssm[12] + fPssm[14]) / 4.0f;
+                    break;
+                case 23: // XU, average over all *U (Q, K, I, S)
+                    pssmVal = (fPssm[7] + fPssm[8] + fPssm[13] + fPssm[15]) / 4.0f; 
+                    break;
+                default: // should not happen
+                    Debug(Debug::ERROR) << "Error in PSSMCalculator::computeLogPSSM: non-canonical dinucleotide index out of range: " << aa << "\n";
+                    EXIT(EXIT_FAILURE);
+            }
             pssmVal = static_cast<char>((pssmVal < 0.0) ? pssmVal - 0.5 : pssmVal + 0.5);
             float truncPssmVal =  std::min(pssmVal, 127.0f);
             truncPssmVal       =  std::max(-128.0f, truncPssmVal);
             pssm[idx] = truncPssmVal;
         }
     }
+    delete [] fPssm;
 }
 
 void PSSMCalculator::preparePseudoCounts(float *frequency, float *frequency_with_pseudocounts, size_t entrySize,
@@ -285,7 +328,7 @@ void PSSMCalculator::computeNeff_M(float *frequency, float *seqWeight, float *Ne
     float Neff_HMM = 0.0f;
     for (size_t pos = 0; pos < queryLength; pos++) {
         float sum = 0.0f;
-        for (size_t aa = 0; aa < Sequence::PROFILE_AA_SIZE; ++aa){
+        for (size_t aa = 0; aa < 20; ++aa){ // use PROFILE_CANON_DINUC_SIZE later
             float freq_pos_aa = frequency[pos * Sequence::PROFILE_AA_SIZE + aa];
             if (freq_pos_aa > 1E-10) {
                 sum -= freq_pos_aa * MathUtil::flog2(freq_pos_aa);
@@ -405,7 +448,7 @@ void PSSMCalculator::computeMatchWeights(float * matchWeight, float * seqWeight,
                 }
             }
         }
-        MathUtil::NormalizeTo1(&matchWeight[pos * Sequence::PROFILE_AA_SIZE], Sequence::PROFILE_AA_SIZE, subMat->pBack);
+        MathUtil::NormalizeTo1(&matchWeight[pos * Sequence::PROFILE_AA_SIZE], 20, subMat->pBack); // use PROFILE_CANON_DINUC_SIZE later
     }
 }
 
@@ -414,7 +457,7 @@ void PSSMCalculator::computeContextSpecificWeights(float * matchWeight, float *w
     //For weighting: include only columns into subalignment i that have a max fraction of seqs with endgap
     const float MAXENDGAPFRAC=0.1;
     const int NCOLMIN=20;   //min number of cols in subalignment for calculating pos-specific weights w[k][i]
-    const int ENDGAP=22;    //Important to distinguish because end gaps do not contribute to tansition counts
+    const int ENDGAP=26;    //Important to distinguish because end gaps do not contribute to tansition counts
 
     int nseqi = 0;
 //    unsigned int NAA_VECSIZE = ((MultipleAlignment::NAA+ 3 + VECSIZE_INT - 1) / VECSIZE_INT) * VECSIZE_INT; // round NAA+3 up to next multiple of VECSIZE_INT
@@ -547,8 +590,8 @@ void PSSMCalculator::computeContextSpecificWeights(float * matchWeight, float *w
 
             // Add contributions to Neff[i]
             for (int j = jmin; j <= jmax; ++j) {
-                MathUtil::NormalizeTo1(f[j], MultipleAlignment::NAA);
-                for (int a = 0; a < 20; ++a)
+                MathUtil::NormalizeTo1(f[j], 20); // use PROFILE_CANON_DINUC_SIZE later
+                for (int a = 0; a < 20; ++a) // use PROFILE_CANON_DINUC_SIZE later
                     if (f[j][a] > 1E-10)
                         Neff_M[i] -= f[j][a]
                                      * MathUtil::flog2(f[j][a]);
@@ -572,11 +615,11 @@ void PSSMCalculator::computeContextSpecificWeights(float * matchWeight, float *w
         }
 
         // Calculate amino acid frequencies q->f[i][a] from weights wi[k]
-        for (int a = 0; a < 20; ++a)
+        for (size_t a = 0; a < 20; ++a) // use PROFILE_CANON_DINUC_SIZE later
             matchWeight[i * Sequence::PROFILE_AA_SIZE + a] = 0.0;
         for (size_t k = 0; k < setSize; ++k)
             matchWeight[i * Sequence::PROFILE_AA_SIZE + (int) X[k][i]] += wi[k];
-        MathUtil::NormalizeTo1((matchWeight+ i * Sequence::PROFILE_AA_SIZE), MultipleAlignment::NAA, subMat->pBack);
+        MathUtil::NormalizeTo1((matchWeight+ i * Sequence::PROFILE_AA_SIZE), 20, subMat->pBack); // use PROFILE_CANON_DINUC_SIZE later
     }
     // remove end gaps
     for (size_t k = 0; k < setSize; ++k) {
@@ -653,7 +696,8 @@ void PSSMCalculator::computeConsensusSequence(unsigned char * consensusSeq, floa
     for (size_t pos = 0; pos < queryLength; pos++) {
         float maxw = 1E-8;
         int maxa = MultipleAlignment::ANY;
-        for (size_t aa = 0; aa < Sequence::PROFILE_AA_SIZE; ++aa) {
+        // Would it be okay to only go through canonical dinucleotide here?
+        for (size_t aa = 0; aa < Sequence::PROFILE_CANON_DINUC_SIZE; ++aa) {
             float prob = frequency[pos * Sequence::PROFILE_AA_SIZE + aa];
             if (prob - pBack[aa] > maxw) {
                 maxw = prob - pBack[aa];
@@ -676,13 +720,13 @@ void PSSMCalculator::Profile::toBuffer(const unsigned char* centerSequence, size
         result.push_back(static_cast<unsigned char>(centerSequence[pos]));
         result.push_back(static_cast<unsigned char>(subMat.aa2num[static_cast<int>(consensus[pos])]));
         result.push_back(static_cast<unsigned char>(MathUtil::convertNeffToChar(neffM[pos])));
-#ifdef GAP_POS_SCORING
-        result.push_back(gDel[pos]);
-        result.push_back(gIns[pos]);
-#else
-        result.push_back(static_cast<unsigned char>(0));
-        result.push_back(static_cast<unsigned char>(0));
-#endif
+// #ifdef GAP_POS_SCORING
+//         result.push_back(gDel[pos]);
+//         result.push_back(gIns[pos]);
+// #else
+//         result.push_back(static_cast<unsigned char>(0));
+//         result.push_back(static_cast<unsigned char>(0));
+// #endif
     }
 }
 

@@ -231,6 +231,10 @@ MultipleAlignment::MSAResult MultipleAlignment::computeMSA(Sequence *centerSeq, 
         for (size_t pos = 0; pos < centerSeqSize; ++pos) {
             msaSequence[k][pos] = (msaSequence[k][pos] == '-') ?
                                   GAP : static_cast<int>(subMat->aa2num[static_cast<int>(msaSequence[k][pos])]);
+            // If the msaSequence[k][pos] is non-canonical letters, change it to ANY
+            if (msaSequence[k][pos] > 15 && msaSequence[k][pos] < GAP) {
+                msaSequence[k][pos] = ANY;
+            }
         }
         int len = std::min(maxMsaSeqLen, (centerSeqSize + VECSIZE_INT*4));
         int startPos = std::min(centerSeqSize, maxMsaSeqLen - 1);

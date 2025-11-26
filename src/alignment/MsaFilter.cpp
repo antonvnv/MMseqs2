@@ -10,7 +10,7 @@
 #include "MultipleAlignment.h"
 
 MsaFilter::MsaFilter(int maxSeqLen, int maxSetSize, SubstitutionMatrix *m, int gapOpen, int gapExtend) :
-    // TODO allow changing these?
+    // TODO allow changing these? Should I try to optimize these?
     PLTY_GAPOPEN(6.0f), PLTY_GAPEXTD(1.0f), gapOpen(gapOpen), gapExtend(gapExtend) {
     this->m = m;
     this->maxSeqLen = maxSeqLen;
