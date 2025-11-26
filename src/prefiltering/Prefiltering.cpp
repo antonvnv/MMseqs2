@@ -1081,8 +1081,7 @@ int Prefiltering::getKmerThreshold(const float sensitivity, const bool isProfile
             EXIT(EXIT_FAILURE);
         }
     }
-    // return static_cast<int>(kmerThrBest);
-    return static_cast<int>(87);
+    return static_cast<int>(kmerThrBest);
 }
 
 size_t Prefiltering::estimateMemoryConsumption(int split, size_t dbSize, size_t resSize,
