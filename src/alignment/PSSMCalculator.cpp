@@ -328,7 +328,7 @@ void PSSMCalculator::computeNeff_M(float *frequency, float *seqWeight, float *Ne
     float Neff_HMM = 0.0f;
     for (size_t pos = 0; pos < queryLength; pos++) {
         float sum = 0.0f;
-        for (size_t aa = 0; aa < 20; ++aa){ // use PROFILE_CANON_DINUC_SIZE later
+        for (size_t aa = 0; aa < Sequence::PROFILE_CANON_DINUC_SIZE; ++aa){ // use PROFILE_CANON_DINUC_SIZE instead of 20
             float freq_pos_aa = frequency[pos * Sequence::PROFILE_AA_SIZE + aa];
             if (freq_pos_aa > 1E-10) {
                 sum -= freq_pos_aa * MathUtil::flog2(freq_pos_aa);
@@ -448,7 +448,7 @@ void PSSMCalculator::computeMatchWeights(float * matchWeight, float * seqWeight,
                 }
             }
         }
-        MathUtil::NormalizeTo1(&matchWeight[pos * Sequence::PROFILE_AA_SIZE], 20, subMat->pBack); // use PROFILE_CANON_DINUC_SIZE later
+        MathUtil::NormalizeTo1(&matchWeight[pos * Sequence::PROFILE_AA_SIZE], Sequence::PROFILE_CANON_DINUC_SIZE, subMat->pBack); // use PROFILE_CANON_DINUC_SIZE instead of 20
     }
 }
 
@@ -590,8 +590,8 @@ void PSSMCalculator::computeContextSpecificWeights(float * matchWeight, float *w
 
             // Add contributions to Neff[i]
             for (int j = jmin; j <= jmax; ++j) {
-                MathUtil::NormalizeTo1(f[j], 20); // use PROFILE_CANON_DINUC_SIZE later
-                for (int a = 0; a < 20; ++a) // use PROFILE_CANON_DINUC_SIZE later
+                MathUtil::NormalizeTo1(f[j], Sequence::PROFILE_CANON_DINUC_SIZE); // use PROFILE_CANON_DINUC_SIZE later
+                for (size_t a = 0; a < Sequence::PROFILE_CANON_DINUC_SIZE; ++a) // use PROFILE_CANON_DINUC_SIZE later
                     if (f[j][a] > 1E-10)
                         Neff_M[i] -= f[j][a]
                                      * MathUtil::flog2(f[j][a]);
@@ -615,11 +615,11 @@ void PSSMCalculator::computeContextSpecificWeights(float * matchWeight, float *w
         }
 
         // Calculate amino acid frequencies q->f[i][a] from weights wi[k]
-        for (size_t a = 0; a < 20; ++a) // use PROFILE_CANON_DINUC_SIZE later
+        for (size_t a = 0; a < Sequence::PROFILE_CANON_DINUC_SIZE; ++a) // use PROFILE_CANON_DINUC_SIZE instead of 20
             matchWeight[i * Sequence::PROFILE_AA_SIZE + a] = 0.0;
         for (size_t k = 0; k < setSize; ++k)
             matchWeight[i * Sequence::PROFILE_AA_SIZE + (int) X[k][i]] += wi[k];
-        MathUtil::NormalizeTo1((matchWeight+ i * Sequence::PROFILE_AA_SIZE), 20, subMat->pBack); // use PROFILE_CANON_DINUC_SIZE later
+        MathUtil::NormalizeTo1((matchWeight+ i * Sequence::PROFILE_AA_SIZE), Sequence::PROFILE_CANON_DINUC_SIZE, subMat->pBack); // use PROFILE_CANON_DINUC_SIZE instead of 20
     }
     // remove end gaps
     for (size_t k = 0; k < setSize; ++k) {

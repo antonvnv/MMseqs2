@@ -196,7 +196,7 @@ void setNuclSearchDefaults(Parameters *p) {
     if (  p->PARAM_MAX_SEQ_LEN.wasSet == false) {
         p->maxSeqLen = 10000;
     }
-    p->forceCompBiasCorrection = true;
+    p->forceCompBiasCorrection = 1;
 }
 
 
