@@ -2572,8 +2572,8 @@ void Parameters::setDefaults() {
     filterMinEnable = 0;
     wg = false;
     pcmode = PCMODE_SUBSTITUTION_SCORE;
-    pca = MultiParam<PseudoCounts>(PseudoCounts(1.3, 1.3));
-    pcb = MultiParam<PseudoCounts>(PseudoCounts(1.8, 1.8));
+    pca = MultiParam<PseudoCounts>(PseudoCounts(1.2, 1.2));
+    pcb = MultiParam<PseudoCounts>(PseudoCounts(2.2, 2.2));
     profileOutputMode = 0;
 
     // sequence2profile

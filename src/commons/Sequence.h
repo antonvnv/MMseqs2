@@ -557,6 +557,7 @@ public:
 
 private:
     void mapSequence(const char *seq, unsigned int dataLen);
+    void mapSequenceReverse(const char *seq, unsigned int dataLen);
     // read next kmer profile in profile_matrix
     void nextProfileKmer();
 

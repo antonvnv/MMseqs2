@@ -205,7 +205,11 @@ void Sequence::mapSequence(size_t id, unsigned int dbKey, const char *sequence, 
     this->dbKey = dbKey;
     this->seqData = sequence;
     if (Parameters::isEqualDbtype(this->seqType, Parameters::DBTYPE_AMINO_ACIDS) || Parameters::isEqualDbtype(this->seqType, Parameters::DBTYPE_NUCLEOTIDES)) {
-        mapSequence(sequence, seqLen);
+        if (reverse) {
+            mapSequenceReverse(sequence, seqLen);
+        } else {
+            mapSequence(sequence, seqLen);
+        }
     } else if (Parameters::isEqualDbtype(this->seqType, Parameters::DBTYPE_HMM_PROFILE)) {
         mapProfile(sequence, seqLen, remap, alignSubMat, reverse, forceCompBias, scale);
     } else {
@@ -410,7 +414,7 @@ void Sequence::mapSequence(const char* __restrict sequence, unsigned int dataLen
 
     const unsigned char* aa2num = subMat->aa2num;  // local pointer for speed
 
-    // Process all but last; last uses 'C' as your sentinel partner.
+    // Process all but last; last uses 'X' as your sentinel partner.
     unsigned i = 0;
     const unsigned char* __restrict p = (const unsigned char*)sequence;
 
@@ -432,11 +436,45 @@ void Sequence::mapSequence(const char* __restrict sequence, unsigned int dataLen
         numSequence[i] = aa2num[(s_1 << 8) | s_2];
         s_1 = s_2;
     }
-    // Last char, just append C (arbitrary)
-    unsigned int idx = (s_1 << 8) | static_cast<unsigned int>('C');
+    // Last char, just append X (arbitrary)
+    unsigned int idx = (s_1 << 8) | static_cast<unsigned int>('X');
     numSequence[i] = aa2num[idx];
 
     this->L = i+1;
+}
+
+void Sequence::mapSequenceReverse(const char* __restrict sequence, unsigned int dataLen) {
+    if(dataLen >= maxLen){
+        numSequence = static_cast<unsigned char*>(realloc(numSequence, dataLen+1));
+        maxLen = dataLen;
+    }
+
+    const unsigned char* aa2num = subMat->aa2num;  // local pointer for speed
+
+    // Process all but the first; first uses 'X' as your sentinel partner.
+    unsigned i = 0;
+    const unsigned char* __restrict p = (const unsigned char*)sequence;
+
+    unsigned int s_1, s_2, s_3, s_4, s_5;
+    s_1 = static_cast<unsigned int>('X');
+    for (; i + 3 < dataLen; i += 4) {
+        s_2 = static_cast<unsigned int>(p[i]);
+        s_3 = static_cast<unsigned int>(p[i + 1]);
+        s_4 = static_cast<unsigned int>(p[i + 2]);
+        s_5 = static_cast<unsigned int>(p[i + 3]);
+        numSequence[i] = aa2num[(s_1 << 8) | s_2];
+        numSequence[i + 1] = aa2num[(s_2 << 8) | s_3];
+        numSequence[i + 2] = aa2num[(s_3 << 8) | s_4];
+        numSequence[i + 3] = aa2num[(s_4 << 8) | s_5];
+        s_1 = s_5;
+    }
+    for (; i < dataLen; i++) {
+        s_2 = static_cast<unsigned int>(p[i]);
+        numSequence[i] = aa2num[(s_1 << 8) | s_2];
+        s_1 = s_2;
+    }
+
+    this->L = i;
 }
 
 // Get the reverse complements
