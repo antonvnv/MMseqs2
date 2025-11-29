@@ -122,6 +122,8 @@ void MultipleAlignment::updateGapsInSequenceSet(char **msaSequence, size_t cente
         char *edgeSeqMSA = msaSequence[i+1];
         const std::vector<unsigned char> &edgeSeq = seqs[i];
 
+        unsigned int step = (reverse == true) ? -1 : 1; // -1 == UINT_MAX - 1
+
         // HACK: score was 0 and sequence was rejected, so we fill in an empty gap sequence
         // Needed for pairaln with dummy sequences
         if(targetPos == UINT_MAX) {
@@ -157,7 +159,7 @@ void MultipleAlignment::updateGapsInSequenceSet(char **msaSequence, size_t cente
                             edgeSeqMSA[bufferPos] = letter;
                             bufferPos++;
                         }
-                        targetPos += (reverse == true) ? -1 : 1;
+                        targetPos += step;
                         alnPos++;
                     }
                     if(alnPos >= bt.size()){
@@ -172,7 +174,7 @@ void MultipleAlignment::updateGapsInSequenceSet(char **msaSequence, size_t cente
                         edgeSeqMSA[bufferPos] = letter;
                         bufferPos++;
                         queryPos++;
-                        targetPos += (reverse == true) ? -1 : 1;
+                        targetPos += step;
                     }
                     continue;
                 }else if(bt.at(alnPos) == 'M'){
@@ -191,7 +193,7 @@ void MultipleAlignment::updateGapsInSequenceSet(char **msaSequence, size_t cente
 
                     bufferPos++;
                     queryPos++;
-                    targetPos += (reverse == true) ? -1 : 1;
+                    targetPos += step;
                 }
             }
         }

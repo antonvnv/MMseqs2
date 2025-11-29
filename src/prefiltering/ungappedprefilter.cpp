@@ -395,13 +395,14 @@ void runFilterOnCpu(Parameters & par, BaseMatrix * subMat, int8_t * tinySubMat,
                 if(sequenceLookup == NULL){
                     char * targetSeq = tdbr->getData(tId, thread_idx);
                     unsigned int targetSeqLen = tdbr->getSeqLen(tId);
-                    tSeq.mapSequence(tId, targetKey, targetSeq, targetSeqLen);
+                    tSeq.mapSequence(tId, targetKey, targetSeq, targetSeqLen, false, NULL, reverse);
                     // mask numSequence
                     unsigned char xChar = subMat->aa2num[static_cast<int>('X')];
                     for (int i = 0; i < tSeq.L; i++) {
                         tSeq.numSequence[i] = ((targetSeq[i] >= 32 && targetSeq[i] <= 52) || targetSeq[i] >= 97)  ? xChar : tSeq.numSequence[i];
                     }
                 }else{
+                    // TODO: do it have to worry about this also...? #dinuc
                     tSeq.mapSequence(tId, targetKey, sequenceLookup->getSequence(tId));
                 }
                 float queryLength = qSeq.L;
