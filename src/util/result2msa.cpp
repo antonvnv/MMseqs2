@@ -239,10 +239,7 @@ int result2msa(int argc, const char **argv, const Command &command) {
                     Debug(Debug::ERROR) << "Sequence " << key << " does not exist in target sequence database\n";
                     EXIT(EXIT_FAILURE);
                 }
-                edgeSequence.mapSequence(edgeId, key, tDbr->getData(edgeId, thread_idx), tDbr->getSeqLen(edgeId));
-                seqSet.emplace_back(std::vector<unsigned char>(edgeSequence.numSequence, edgeSequence.numSequence + edgeSequence.L));
-                seqKeys.emplace_back(key);
-
+                
                 const size_t columns = Util::getWordsOfLine(data, entry, 255);
                 if (columns > Matcher::ALN_RES_WITHOUT_BT_COL_CNT) {
                     alnResults.emplace_back(Matcher::parseAlignmentRecord(data));
@@ -254,10 +251,18 @@ int result2msa(int argc, const char **argv, const Command &command) {
                     }
                     alnResults.emplace_back(matcher.getSWResult(&edgeSequence, INT_MAX, false, 0, 0.0, FLT_MAX, Matcher::SCORE_COV_SEQID, 0, false));
                 }
+                // Check if it is on the reverse strand or not
+                bool reverse = false;
+                if (alnResults.back().qStartPos > alnResults.back().qEndPos) {
+                    reverse = true;
+                }
+                edgeSequence.mapSequence(edgeId, key, tDbr->getData(edgeId, thread_idx), tDbr->getSeqLen(edgeId), false, NULL, reverse);
+                seqSet.emplace_back(std::vector<unsigned char>(edgeSequence.numSequence, edgeSequence.numSequence + edgeSequence.L));
+                seqKeys.emplace_back(key);
                 data = Util::skipLine(data);
             }
 
-            MultipleAlignment::MSAResult res = aligner.computeMSA(&centerSequence, seqSet, alnResults, !par.allowDeletion);
+            MultipleAlignment::MSAResult res = aligner.computeMSA(&centerSequence, seqSet, alnResults, !par.allowDeletion, true);
             //MultipleAlignment::print(res, &subMat);
 
             if (par.msaFormatMode == Parameters::FORMAT_MSA_FASTADB || par.msaFormatMode == Parameters::FORMAT_MSA_FASTADB_SUMMARY) {

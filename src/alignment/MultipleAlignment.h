@@ -31,7 +31,7 @@ public:
     MultipleAlignment(size_t maxSeqLen, SubstitutionMatrix *subMat);
     ~MultipleAlignment();
 
-    MSAResult computeMSA(Sequence *centerSeq, const std::vector<std::vector<unsigned char>> &edgeSeqs, const std::vector<Matcher::result_t> &alignmentResults, bool noDeletionMSA);
+    MSAResult computeMSA(Sequence *centerSeq, const std::vector<std::vector<unsigned char>> &edgeSeqs, const std::vector<Matcher::result_t> &alignmentResults, bool noDeletionMSA, bool nucleic = false);
 
     static void print(MSAResult msaResult, SubstitutionMatrix * subMat);
 

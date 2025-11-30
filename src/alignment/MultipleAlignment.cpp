@@ -206,7 +206,7 @@ void MultipleAlignment::updateGapsInSequenceSet(char **msaSequence, size_t cente
 }
 
 MultipleAlignment::MSAResult MultipleAlignment::computeMSA(Sequence *centerSeq, const std::vector<std::vector<unsigned char>>& edgeSeqs,
-                                                           const std::vector<Matcher::result_t>& alignmentResults, bool noDeletionMSA) {
+                                                           const std::vector<Matcher::result_t>& alignmentResults, bool noDeletionMSA, bool nucleic) {
     if (edgeSeqs.empty()) {
         return singleSequenceMSA(centerSeq);
     }
@@ -233,9 +233,18 @@ MultipleAlignment::MSAResult MultipleAlignment::computeMSA(Sequence *centerSeq, 
         for (size_t pos = 0; pos < centerSeqSize; ++pos) {
             msaSequence[k][pos] = (msaSequence[k][pos] == '-') ?
                                   GAP : static_cast<int>(subMat->aa2num[static_cast<int>(msaSequence[k][pos])]);
-            // If the msaSequence[k][pos] is non-canonical letters, change it to ANY
-            if (msaSequence[k][pos] > 15 && msaSequence[k][pos] < GAP) {
-                msaSequence[k][pos] = ANY;
+            // If we want to translate into nucleotide, it is the case when we want to output with result2msa
+            // Otherwise, we want to do result2profile, probably keeping in dinucleotide makes more sense
+            if (nucleic) {
+                // except GAPs
+                if (msaSequence[k][pos] < GAP) {
+                    msaSequence[k][pos] = subMat->dinucToNuc[static_cast<int>(msaSequence[k][pos])];
+                }
+            } else {
+                // If the msaSequence[k][pos] is non-canonical letters, change it to ANY
+                if (msaSequence[k][pos] > 15 && msaSequence[k][pos] < GAP) {
+                    msaSequence[k][pos] = ANY;
+                }
             }
         }
         int len = std::min(maxMsaSeqLen, (centerSeqSize + VECSIZE_INT*4));
