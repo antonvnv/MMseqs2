@@ -20,6 +20,9 @@ public:
     unsigned char* revcomp;
     unsigned char* tail;
 
+    /* from dinucleotide to the first or the second nucleotide */
+    unsigned char* dinucToNuc;
+
     /* size of alphabet*/
     int alphabetSize;
 

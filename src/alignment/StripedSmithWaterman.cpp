@@ -657,7 +657,7 @@ s_align SmithWaterman::alignStartPosBacktrace (
     uint32_t aaIds = 0;
     size_t mStateCnt = 0;
 	// Need check below for Profile_seq
-	computerBacktrace(profile, db_sequence, r, backtrace, aaIds, scorePerCol, mStateCnt);
+	computerBacktrace(profile, db_sequence, r, backtrace, aaIds, scorePerCol, mStateCnt, reverse);
     r.identicalAACnt = aaIds;
 	if(correlationScoreWeight > 0.0){
         int correlationScore = computeCorrelationScore(scorePerCol, mStateCnt);
@@ -692,15 +692,22 @@ s_align SmithWaterman::alignStartPosBacktrace<SmithWaterman::PROFILE_SEQ>(const 
 
 void SmithWaterman::computerBacktrace(s_profile * query, const unsigned char * db_sequence,
                                       s_align & alignment, std::string & backtrace,
-                                      uint32_t & aaIds, int8_t * scorePerCol, size_t & mStatesCnt){
+                                      uint32_t & aaIds, int8_t * scorePerCol, size_t & mStatesCnt, bool reverse){
     int32_t targetPos = alignment.dbStartPos1, queryPos = alignment.qStartPos1;
+	unsigned char *revcomp = this->subMat->revcomp;
+	unsigned char *dinucToNuc = this->subMat->dinucToNuc;
     for (int32_t c = 0; c < alignment.cigarLen; ++c) {
         char letter = SmithWaterman::cigar_int_to_op(alignment.cigar[c]);
         uint32_t length = SmithWaterman::cigar_int_to_len(alignment.cigar[c]);
         backtrace.reserve(length);
         for (uint32_t i = 0; i < length; ++i){
             if (letter == 'M') {
-                aaIds += (db_sequence[targetPos] == query->query_sequence[queryPos]);
+				// Only consider canonical nucleotides, not X
+				if (reverse) {
+					aaIds += (dinucToNuc[revcomp[db_sequence[targetPos]]] == dinucToNuc[query->query_sequence[queryPos]]) && query->query_sequence[queryPos] < 20;
+				} else {
+					aaIds += (dinucToNuc[db_sequence[targetPos]] == dinucToNuc[query->query_sequence[queryPos]]) && query->query_sequence[queryPos] < 20;
+				}
 				scorePerCol[mStatesCnt] = query->mat[query->query_sequence[queryPos] * query->alphabetSize + db_sequence[targetPos]] + query->composition_bias[queryPos];
                 ++mStatesCnt;
                 ++queryPos;

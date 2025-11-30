@@ -514,6 +514,33 @@ void SubstitutionMatrix::setupDinucleotideLetterMapping(){
     this->tail[this->aa2num[(int)'J']] = this->aa2num[(int)'V'];
     this->tail[this->aa2num[(int)'O']] = this->aa2num[(int)'W'];
     this->tail[this->aa2num[(int)'U']] = this->aa2num[(int)'Y'];
+
+    // Set up dinucleotide to the first or the second nucleotide
+    this->dinucToNuc[this->aa2num[(int)'C']] = this->aa2num[(int)'A'];
+    this->dinucToNuc[this->aa2num[(int)'G']] = this->aa2num[(int)'A'];
+    this->dinucToNuc[this->aa2num[(int)'L']] = this->aa2num[(int)'A'];
+    this->dinucToNuc[this->aa2num[(int)'Q']] = this->aa2num[(int)'A'];
+    this->dinucToNuc[this->aa2num[(int)'D']] = this->aa2num[(int)'C'];
+    this->dinucToNuc[this->aa2num[(int)'F']] = this->aa2num[(int)'C'];
+    this->dinucToNuc[this->aa2num[(int)'R']] = this->aa2num[(int)'C'];
+    this->dinucToNuc[this->aa2num[(int)'K']] = this->aa2num[(int)'C'];
+    this->dinucToNuc[this->aa2num[(int)'M']] = this->aa2num[(int)'G'];
+    this->dinucToNuc[this->aa2num[(int)'A']] = this->aa2num[(int)'G'];
+    this->dinucToNuc[this->aa2num[(int)'P']] = this->aa2num[(int)'G'];
+    this->dinucToNuc[this->aa2num[(int)'I']] = this->aa2num[(int)'G'];
+    this->dinucToNuc[this->aa2num[(int)'E']] = this->aa2num[(int)'U'];
+    this->dinucToNuc[this->aa2num[(int)'N']] = this->aa2num[(int)'U'];
+    this->dinucToNuc[this->aa2num[(int)'H']] = this->aa2num[(int)'U'];
+    this->dinucToNuc[this->aa2num[(int)'S']] = this->aa2num[(int)'U'];
+    this->dinucToNuc[this->aa2num[(int)'T']] = this->aa2num[(int)'A'];
+    this->dinucToNuc[this->aa2num[(int)'V']] = this->aa2num[(int)'C'];
+    this->dinucToNuc[this->aa2num[(int)'W']] = this->aa2num[(int)'G'];
+    this->dinucToNuc[this->aa2num[(int)'Y']] = this->aa2num[(int)'U'];
+    this->dinucToNuc[this->aa2num[(int)'B']] = this->aa2num[(int)'X'];
+    this->dinucToNuc[this->aa2num[(int)'J']] = this->aa2num[(int)'X'];
+    this->dinucToNuc[this->aa2num[(int)'O']] = this->aa2num[(int)'X'];
+    this->dinucToNuc[this->aa2num[(int)'U']] = this->aa2num[(int)'X'];
+    this->dinucToNuc[this->aa2num[(int)'X']] = this->aa2num[(int)'X'];
 }
 
 

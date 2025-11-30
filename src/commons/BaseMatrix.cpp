@@ -28,6 +28,8 @@ BaseMatrix::BaseMatrix(){
     for (int i = 0; i < 25; ++i) {
         tail[i] = static_cast<unsigned char>('X');
     }
+    // Mapping from dinucleotide to the first or the second nucleotide
+    dinucToNuc = new unsigned char[25];
 }
 
 BaseMatrix::~BaseMatrix(){
@@ -35,6 +37,7 @@ BaseMatrix::~BaseMatrix(){
     delete[] aa2num;
     delete[] revcomp;
     delete[] tail;
+    delete[] dinucToNuc;
     delete[] pBack;
     for (int i = 0; i < allocatedAlphabetSize; i++){
         delete[] probMatrix[i];

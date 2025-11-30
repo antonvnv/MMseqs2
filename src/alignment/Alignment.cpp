@@ -442,7 +442,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
 
                         // recompute alignment boundaries (without changing evalue)
                         const bool isIdentity = (queryDbKey == swResults[result].dbKey && (includeIdentity || sameQTDB)) ? true : false;
-                        Matcher::result_t res = realigner->getSWResult(&dbSeq, INT_MAX, false, covMode, realignCov, FLT_MAX, realignSwMode, seqIdMode, isIdentity);
+                        Matcher::result_t res = realigner->getSWResult(&dbSeq, INT_MAX, false, covMode, realignCov, FLT_MAX, realignSwMode, seqIdMode, isIdentity, false, reverse);
 
                         const bool covOK = Util::hasCoverage(realignCov, covMode, res.qcov, res.dbcov);
                         if (covOK == true || isIdentity) {
@@ -503,7 +503,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
                         }
                         dbSeq.mapSequence(dbId, dbKey, dbSeqData, tdbr->getSeqLen(dbId), false, NULL, reverse);
 
-                        Matcher::result_t res = realigner->getSWResult(&dbSeq, INT_MAX, false, covMode, realignCov, topHitEval, lcaSwMode, seqIdMode, false);
+                        Matcher::result_t res = realigner->getSWResult(&dbSeq, INT_MAX, false, covMode, realignCov, topHitEval, lcaSwMode, seqIdMode, false, false, reverse);
 
                         if (checkCriteria(res, false, topHitEval, seqIdThr, alnLenThr, covMode, realignCov)) {
                             swRealignResults.emplace_back(res);

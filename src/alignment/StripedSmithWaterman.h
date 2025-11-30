@@ -277,7 +277,7 @@ public:
     static int computeCorrelationScore(int8_t * scorePreCol, size_t length);
 
     void computerBacktrace(s_profile * query, const unsigned char * db_sequence,
-                           s_align & alignment, std::string & backtrace, uint32_t & aaIds, int8_t * scorePerCol, size_t & mStatesCnt);
+                           s_align & alignment, std::string & backtrace, uint32_t & aaIds, int8_t * scorePerCol, size_t & mStatesCnt, bool reverse = false);
 
     static uint32_t to_cigar_int (uint32_t length, char op_letter);
 
