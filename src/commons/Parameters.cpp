@@ -178,7 +178,7 @@ Parameters::Parameters():
         PARAM_EXHAUSTIVE_SEARCH(PARAM_EXHAUSTIVE_SEARCH_ID, "--exhaustive-search", "Exhaustive search mode", "For bigger profile DB, run iteratively the search by greedily swapping the search results", typeid(bool), (void *) &exhaustiveSearch, "", MMseqsParameter::COMMAND_PROFILE | MMseqsParameter::COMMAND_EXPERT),
         PARAM_EXHAUSTIVE_SEARCH_FILTER(PARAM_EXHAUSTIVE_SEARCH_FILTER_ID, "--exhaustive-search-filter", "Filter results during exhaustive search", "Filter result during search: 0: do not filter, 1: filter", typeid(int), (void *) &exhaustiveFilterMsa, "^[0-1]{1}$", MMseqsParameter::COMMAND_ALIGN | MMseqsParameter::COMMAND_EXPERT),
 
-        PARAM_STRAND(PARAM_STRAND_ID, "--strand", "Strand selection", "Strand selection only works for DNA/DNA search 0: reverse, 1: forward, 2: both", typeid(int), (void *) &strand, "^[0-2]{1}$", MMseqsParameter::COMMAND_EXPERT),
+        PARAM_STRAND(PARAM_STRAND_ID, "--strand", "Strand selection", "Strand selection only works for nucleotide/nucleotide search 0: reverse, 1: forward, 2: both", typeid(int), (void *) &strand, "^[0-2]{1}$", MMseqsParameter::COMMAND_EXPERT | MMseqsParameter::COMMAND_COMMON),
         PARAM_ORF_FILTER(PARAM_ORF_FILTER_ID, "--orf-filter", "ORF filter", "Prefilter query ORFs with non-selective search\nOnly used during nucleotide-vs-protein classification\nNOTE: Consider disabling when classifying short reads", typeid(int), (void *) &orfFilter, "^[0-1]{1}$"),
         PARAM_ORF_FILTER_S(PARAM_ORF_FILTER_S_ID, "--orf-filter-s", "ORF filter sensitivity", "Sensitivity used for query ORF prefiltering", typeid(float), (void *) &orfFilterSens, "^[0-9]*(\\.[0-9]+)?$"),
         PARAM_ORF_FILTER_E(PARAM_ORF_FILTER_E_ID, "--orf-filter-e", "ORF filter e-value", "E-value threshold used for query ORF prefiltering", typeid(double), (void *) &orfFilterEval, "^([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)|[0-9]*(\\.[0-9]+)?$"),
@@ -792,6 +792,7 @@ Parameters::Parameters():
     extractqueryprofiles.push_back(&PARAM_PCA);
     extractqueryprofiles.push_back(&PARAM_PCB);
     extractqueryprofiles.push_back(&PARAM_WG);
+    extractqueryprofiles.push_back(&PARAM_STRAND);
     extractqueryprofiles.push_back(&PARAM_THREADS);
     extractqueryprofiles.push_back(&PARAM_COMPRESSED);
     extractqueryprofiles.push_back(&PARAM_V);
@@ -2449,7 +2450,7 @@ void Parameters::setDefaults() {
     sensSteps = 1;
     exhaustiveSearch = false;
     exhaustiveFilterMsa = 0;
-    strand = 1;
+    strand = 2;
     orfFilter = 0;
     orfFilterSens = 2.0;
     orfFilterEval = 100;
@@ -2572,8 +2573,8 @@ void Parameters::setDefaults() {
     filterMinEnable = 0;
     wg = false;
     pcmode = PCMODE_SUBSTITUTION_SCORE;
-    pca = MultiParam<PseudoCounts>(PseudoCounts(1.2, 1.2));
-    pcb = MultiParam<PseudoCounts>(PseudoCounts(2.2, 2.2));
+    pca = MultiParam<PseudoCounts>(PseudoCounts(1.3, 1.3));
+    pcb = MultiParam<PseudoCounts>(PseudoCounts(1.8, 1.8));
     profileOutputMode = 0;
 
     // sequence2profile

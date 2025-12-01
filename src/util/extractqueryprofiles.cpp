@@ -106,53 +106,57 @@ int extractqueryprofiles(int argc, const char **argv, const Command& command) {
             if (Parameters::isEqualDbtype(inputDbtype, Parameters::DBTYPE_HMM_PROFILE)) {
                 // Copy the data
                 memcpy(data_cpy, data, sizeof(char) * seqLen * Sequence::PROFILE_READIN_SIZE);
-                // Nothing to do for the forward strand
-                toBuffer(data_cpy, seq.numSequence, seq.numConsensusSequence, seq.neffM, seqLen, result);
-                sequenceWriter.writeData(result.c_str(), result.length(), key, thread_idx);
-                result.clear();
+                if (par.strand == 1 || par.strand == 2) {
+                    // Nothing to do for the forward strand
+                    toBuffer(data_cpy, seq.numSequence, seq.numConsensusSequence, seq.neffM, seqLen, result);
+                    sequenceWriter.writeData(result.c_str(), result.length(), key, thread_idx);
+                    result.clear();
 
-                bufferLen = Orf::writeOrfHeader(buffer, key, static_cast<size_t>(0), seqLen - 1, 0, 0);
-                headerWriter.writeData(buffer, bufferLen, key, thread_idx);
+                    bufferLen = Orf::writeOrfHeader(buffer, key, static_cast<size_t>(0), seqLen - 1, 0, 0);
+                    headerWriter.writeData(buffer, bufferLen, key, thread_idx);
+                }
 
-                // Do the same thing with the reversed profile
-                // Reverse the numSequence, numConsensusSequence, seq.neffM, data_cpy
-                std::reverse(seq.numSequence, seq.numSequence + seqLen);
-                std::reverse(seq.numConsensusSequence, seq.numConsensusSequence + seqLen);
-                std::reverse(seq.neffM, seq.neffM + seqLen);
-                char tmpPssm[Sequence::PROFILE_READIN_SIZE];
-                int i_curr = 0;
-                int j_curr = (seqLen - 1) * Sequence::PROFILE_READIN_SIZE;
-                for (size_t pos = 0; pos < seqLen/2; pos++) {
-                    memcpy(&tmpPssm[0], data_cpy + i_curr, Sequence::PROFILE_READIN_SIZE * sizeof(char));
-                    memcpy(data_cpy + i_curr, data_cpy + j_curr, Sequence::PROFILE_READIN_SIZE * sizeof(char));
-                    memcpy(data_cpy + j_curr, &tmpPssm[0], Sequence::PROFILE_READIN_SIZE * sizeof(char));
-                    i_curr += Sequence::PROFILE_READIN_SIZE;
-                    j_curr -= Sequence::PROFILE_READIN_SIZE;
+                if (par.strand == 0 || par.strand == 2) {
+                    // Do the same thing with the reversed profile
+                    // Reverse the numSequence, numConsensusSequence, seq.neffM, data_cpy
+                    std::reverse(seq.numSequence, seq.numSequence + seqLen);
+                    std::reverse(seq.numConsensusSequence, seq.numConsensusSequence + seqLen);
+                    std::reverse(seq.neffM, seq.neffM + seqLen);
+                    char tmpPssm[Sequence::PROFILE_READIN_SIZE];
+                    int i_curr = 0;
+                    int j_curr = (seqLen - 1) * Sequence::PROFILE_READIN_SIZE;
+                    for (size_t pos = 0; pos < seqLen/2; pos++) {
+                        memcpy(&tmpPssm[0], data_cpy + i_curr, Sequence::PROFILE_READIN_SIZE * sizeof(char));
+                        memcpy(data_cpy + i_curr, data_cpy + j_curr, Sequence::PROFILE_READIN_SIZE * sizeof(char));
+                        memcpy(data_cpy + j_curr, &tmpPssm[0], Sequence::PROFILE_READIN_SIZE * sizeof(char));
+                        i_curr += Sequence::PROFILE_READIN_SIZE;
+                        j_curr -= Sequence::PROFILE_READIN_SIZE;
+                    }
+                    size_t currPos = 0, l = 0;
+                    // for (size_t pos = 0; pos < seqLen; pos++) {
+                    while (l < seqLen && l < maxSeqLength) {
+                        // Swap following position pairs: (1,15), (2,6), (4,12), (5,7), (8,9), (10,11), => canonical dinucleotides
+                        //                                (16,23), (17,22), (18,21), (19,20) => non-canonical dinucleotides
+                        std::swap(data_cpy[currPos + 1], data_cpy[currPos + 15]);
+                        std::swap(data_cpy[currPos + 2], data_cpy[currPos + 6]);
+                        std::swap(data_cpy[currPos + 4], data_cpy[currPos + 12]);
+                        std::swap(data_cpy[currPos + 5], data_cpy[currPos + 7]);
+                        std::swap(data_cpy[currPos + 8], data_cpy[currPos + 9]);
+                        std::swap(data_cpy[currPos + 10], data_cpy[currPos + 11]);
+                        std::swap(data_cpy[currPos + 16], data_cpy[currPos + 23]);
+                        std::swap(data_cpy[currPos + 17], data_cpy[currPos + 22]);
+                        std::swap(data_cpy[currPos + 18], data_cpy[currPos + 21]);
+                        std::swap(data_cpy[currPos + 19], data_cpy[currPos + 20]);
+                        currPos += Sequence::PROFILE_READIN_SIZE;
+                        l++;
+                    }
+                    toBuffer(data_cpy, seq.numSequence, seq.numConsensusSequence, seq.neffM, seqLen, result);
+                    sequenceWriter.writeData(result.c_str(), result.length(), key, thread_idx);
+                    
+                    bufferLen = Orf::writeOrfHeader(buffer, key, seqLen - 1, static_cast<size_t>(0), 0, 0);
+                    headerWriter.writeData(buffer, bufferLen, key, thread_idx);
+                    result.clear();
                 }
-                size_t currPos = 0, l = 0;
-                // for (size_t pos = 0; pos < seqLen; pos++) {
-                while (l < seqLen && l < maxSeqLength) {
-                    // Swap following position pairs: (1,15), (2,6), (4,12), (5,7), (8,9), (10,11), => canonical dinucleotides
-                    //                                (16,23), (17,22), (18,21), (19,20) => non-canonical dinucleotides
-                    std::swap(data_cpy[currPos + 1], data_cpy[currPos + 15]);
-                    std::swap(data_cpy[currPos + 2], data_cpy[currPos + 6]);
-                    std::swap(data_cpy[currPos + 4], data_cpy[currPos + 12]);
-                    std::swap(data_cpy[currPos + 5], data_cpy[currPos + 7]);
-                    std::swap(data_cpy[currPos + 8], data_cpy[currPos + 9]);
-                    std::swap(data_cpy[currPos + 10], data_cpy[currPos + 11]);
-                    std::swap(data_cpy[currPos + 16], data_cpy[currPos + 23]);
-                    std::swap(data_cpy[currPos + 17], data_cpy[currPos + 22]);
-                    std::swap(data_cpy[currPos + 18], data_cpy[currPos + 21]);
-                    std::swap(data_cpy[currPos + 19], data_cpy[currPos + 20]);
-                    currPos += Sequence::PROFILE_READIN_SIZE;
-                    l++;
-                }
-                toBuffer(data_cpy, seq.numSequence, seq.numConsensusSequence, seq.neffM, seqLen, result);
-                sequenceWriter.writeData(result.c_str(), result.length(), key, thread_idx);
-                
-                bufferLen = Orf::writeOrfHeader(buffer, key, seqLen - 1, static_cast<size_t>(0), 0, 0);
-                headerWriter.writeData(buffer, bufferLen, key, thread_idx);
-                result.clear();
             } else {
                 // Get local composition bias
                 if (par.compBiasCorrection == true) {
@@ -170,48 +174,52 @@ int extractqueryprofiles(int argc, const char **argv, const Command& command) {
                 }
                 // seq.numConsensusSequence same as seq.numSequence for single sequence
                 memcpy(seq.numConsensusSequence, seq.numSequence, sizeof(unsigned char) * seqLen);
-                // seq.neffM is 1.0 for single sequence
-                toBuffer(profile_char, seq.numSequence, seq.numConsensusSequence, neffM, seqLen, result);
-                sequenceWriter.writeData(result.c_str(), result.length(), key, thread_idx);
+                if (par.strand == 1 || par.strand == 2) {
+                    // seq.neffM is 1.0 for single sequence
+                    toBuffer(profile_char, seq.numSequence, seq.numConsensusSequence, neffM, seqLen, result);
+                    sequenceWriter.writeData(result.c_str(), result.length(), key, thread_idx);
 
-                bufferLen = Orf::writeOrfHeader(buffer, key, static_cast<size_t>(0), seqLen - 1, 0, 0);
-                headerWriter.writeData(buffer, bufferLen, key, thread_idx);
-                result.clear();
-
-                // Now do the same thing for the reversed profile
-                // Reverse the seq.numSequence and profile_char
-                std::reverse(seq.numSequence, seq.numSequence + seqLen);
-                std::reverse(seq.numConsensusSequence, seq.numConsensusSequence + seqLen);
-                char tmpPssm[Sequence::PROFILE_READIN_SIZE];
-                int i_curr = 0;
-                int j_curr = (seqLen - 1) * Sequence::PROFILE_READIN_SIZE;
-                for (size_t pos = 0; pos < seqLen/2; pos++) {
-                    memcpy(&tmpPssm[0], profile_char + i_curr, Sequence::PROFILE_READIN_SIZE * sizeof(char));
-                    memcpy(profile_char + i_curr, profile_char + j_curr, Sequence::PROFILE_READIN_SIZE * sizeof(char));
-                    memcpy(profile_char + j_curr, &tmpPssm[0], Sequence::PROFILE_READIN_SIZE * sizeof(char));
-                    i_curr += Sequence::PROFILE_READIN_SIZE;
-                    j_curr -= Sequence::PROFILE_READIN_SIZE;
+                    bufferLen = Orf::writeOrfHeader(buffer, key, static_cast<size_t>(0), seqLen - 1, 0, 0);
+                    headerWriter.writeData(buffer, bufferLen, key, thread_idx);
+                    result.clear();
                 }
-                for (size_t pos = 0; pos < seqLen; pos++) {
-                    // Swap following position pairs: (1,15), (2,6), (4,12), (5,7), (8,9), (10,11), => canonical dinucleotides
-                    //                                (16,23), (17,22), (18,21), (19,20) => non-canonical dinucleotides
-                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 1], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 15]);
-                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 2], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 6]);
-                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 4], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 12]);
-                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 5], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 7]);
-                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 8], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 9]);
-                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 10], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 11]);
-                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 16], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 23]);
-                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 17], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 22]);
-                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 18], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 21]);
-                    std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 19], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 20]);
-                }
-                toBuffer(profile_char, seq.numSequence, seq.numConsensusSequence, neffM, seqLen, result);
-                sequenceWriter.writeData(result.c_str(), result.length(), key, thread_idx);
+                
+                if (par.strand == 0 || par.strand == 2) {
+                    // Now do the same thing for the reversed profile
+                    // Reverse the seq.numSequence and profile_char
+                    std::reverse(seq.numSequence, seq.numSequence + seqLen);
+                    std::reverse(seq.numConsensusSequence, seq.numConsensusSequence + seqLen);
+                    char tmpPssm[Sequence::PROFILE_READIN_SIZE];
+                    int i_curr = 0;
+                    int j_curr = (seqLen - 1) * Sequence::PROFILE_READIN_SIZE;
+                    for (size_t pos = 0; pos < seqLen/2; pos++) {
+                        memcpy(&tmpPssm[0], profile_char + i_curr, Sequence::PROFILE_READIN_SIZE * sizeof(char));
+                        memcpy(profile_char + i_curr, profile_char + j_curr, Sequence::PROFILE_READIN_SIZE * sizeof(char));
+                        memcpy(profile_char + j_curr, &tmpPssm[0], Sequence::PROFILE_READIN_SIZE * sizeof(char));
+                        i_curr += Sequence::PROFILE_READIN_SIZE;
+                        j_curr -= Sequence::PROFILE_READIN_SIZE;
+                    }
+                    for (size_t pos = 0; pos < seqLen; pos++) {
+                        // Swap following position pairs: (1,15), (2,6), (4,12), (5,7), (8,9), (10,11), => canonical dinucleotides
+                        //                                (16,23), (17,22), (18,21), (19,20) => non-canonical dinucleotides
+                        std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 1], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 15]);
+                        std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 2], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 6]);
+                        std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 4], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 12]);
+                        std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 5], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 7]);
+                        std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 8], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 9]);
+                        std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 10], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 11]);
+                        std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 16], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 23]);
+                        std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 17], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 22]);
+                        std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 18], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 21]);
+                        std::swap(profile_char[pos * Sequence::PROFILE_READIN_SIZE + 19], profile_char[pos * Sequence::PROFILE_READIN_SIZE + 20]);
+                    }
+                    toBuffer(profile_char, seq.numSequence, seq.numConsensusSequence, neffM, seqLen, result);
+                    sequenceWriter.writeData(result.c_str(), result.length(), key, thread_idx);
 
-                bufferLen = Orf::writeOrfHeader(buffer, key, seqLen - 1, static_cast<size_t>(0), 0, 0);
-                headerWriter.writeData(buffer, bufferLen, key, thread_idx);
-                result.clear();
+                    bufferLen = Orf::writeOrfHeader(buffer, key, seqLen - 1, static_cast<size_t>(0), 0, 0);
+                    headerWriter.writeData(buffer, bufferLen, key, thread_idx);
+                    result.clear();
+                }
             }
         }
         delete[] profile_char;
