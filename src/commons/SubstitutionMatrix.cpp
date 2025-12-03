@@ -378,10 +378,10 @@ void SubstitutionMatrix::setupDinucleotideLetterMapping(){
                     this->aa2num[static_cast<int>(dinucleotide)] = this->aa2num[(int)'H'];
                     break;
                 case 0b0101010001010100: // TT
-                    this->aa2num[static_cast<int>(dinucleotide)] = this->aa2num[(int)'H'];
+                    this->aa2num[static_cast<int>(dinucleotide)] = this->aa2num[(int)'S'];
                     break;
                 case 0b0101010001010101: // TU
-                    this->aa2num[static_cast<int>(dinucleotide)] = this->aa2num[(int)'H'];
+                    this->aa2num[static_cast<int>(dinucleotide)] = this->aa2num[(int)'S'];
                     break;
                 case 0b0101010101000001: // UA
                     this->aa2num[static_cast<int>(dinucleotide)] = this->aa2num[(int)'E'];
@@ -393,7 +393,7 @@ void SubstitutionMatrix::setupDinucleotideLetterMapping(){
                     this->aa2num[static_cast<int>(dinucleotide)] = this->aa2num[(int)'H'];
                     break;
                 case 0b0101010101010100: // UT
-                    this->aa2num[static_cast<int>(dinucleotide)] = this->aa2num[(int)'H'];
+                    this->aa2num[static_cast<int>(dinucleotide)] = this->aa2num[(int)'S'];
                     break;
                 case 0b0101010101010101: // UU
                     this->aa2num[static_cast<int>(dinucleotide)] = this->aa2num[(int)'S'];
