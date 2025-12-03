@@ -213,7 +213,7 @@ while [ "$STEP" -lt "$NUM_IT" ]; do
             PARAM="PROFILE_PAR_$STEP"
             eval TMP="\$$PARAM"
             # shellcheck disable=SC2086
-            $RUNNER "$MMSEQS" result2profile "$ORIQUERYDB" "$TARGETDB" "$TMP_PATH/aln_$STEP" "$TMP_PATH/profile_$STEP" ${TMP} \
+            $RUNNER "$MMSEQS" result2profile "$ORIQUERYDB" "$2" "$TMP_PATH/aln_$STEP" "$TMP_PATH/profile_$STEP" ${TMP} \
                 || fail "Create profile died"
         fi
     fi

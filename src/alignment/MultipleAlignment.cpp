@@ -122,7 +122,7 @@ void MultipleAlignment::updateGapsInSequenceSet(char **msaSequence, size_t cente
         char *edgeSeqMSA = msaSequence[i+1];
         const std::vector<unsigned char> &edgeSeq = seqs[i];
 
-        unsigned int step = (reverse == true) ? -1 : 1; // -1 == UINT_MAX - 1
+        unsigned int step = (reverse == true) ? -1 : 1; // -1 == UINT_MAX
 
         // HACK: score was 0 and sequence was rejected, so we fill in an empty gap sequence
         // Needed for pairaln with dummy sequences
