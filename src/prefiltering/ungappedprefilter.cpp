@@ -40,7 +40,7 @@ void intHandlerClient(int) {
 }
 
 void runFilterOnGpu(Parameters & par, BaseMatrix * subMat,
-                    DBReader<unsigned int> * qdbr, DBReader<unsigned int> * tdbr,
+                    DBReader<unsigned int> * qdbr, DBReader<unsigned int> * qhdbr, DBReader<unsigned int> * tdbr,
                     bool sameDB, DBWriter & resultWriter, EvalueComputation * evaluer,
                     QueryMatcherTaxonomyHook *taxonomyHook){
     Debug::Progress progress(qdbr->getSize());
@@ -169,7 +169,13 @@ void runFilterOnGpu(Parameters & par, BaseMatrix * subMat,
         size_t queryKey = qdbr->getDbKey(id);
         unsigned int querySeqLen = qdbr->getSeqLen(id);
         char *querySeqData = qdbr->getData(id, 0);
-        qSeq.mapSequence(id, queryKey, querySeqData, querySeqLen);
+
+	// Get the header
+        char *queryHeaderData = qhdbr->getData(id, 0);
+        Orf::SequenceLocation qloc = Orf::parseOrfHeader(queryHeaderData);
+        bool reverse = (qloc.strand == Orf::STRAND_PLUS) ? false : true;
+
+        qSeq.mapSequence(id, queryKey, querySeqData, querySeqLen, par.remapProfile, subMat, reverse, par.forceCompBiasCorrection, par.compBiasCorrectionScale);
         if (Parameters::isEqualDbtype(querySeqType, Parameters::DBTYPE_HMM_PROFILE)) {
             profile = qSeq.profile_for_alignment;
         } else {
@@ -558,7 +564,7 @@ int prefilterInternal(int argc, const char **argv, const Command &command, int m
     }
     if(par.gpu){
 #ifdef HAVE_CUDA
-        runFilterOnGpu(par, subMat, qdbr, tdbr, sameDB,
+        runFilterOnGpu(par, subMat, qdbr, qhdbr, tdbr, sameDB,
                        resultWriter, evaluer, taxonomyHook);
 #else
         Debug(Debug::ERROR) << "MMseqs2 was compiled without CUDA support\n";

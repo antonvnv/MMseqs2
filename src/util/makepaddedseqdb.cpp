@@ -86,7 +86,7 @@ int makepaddedseqdb(int argc, const char **argv, const Command &command) {
             }
         }
         const size_t sequencepadding = (seq.L % ALIGN == 0) ? 0 : ALIGN - seq.L % ALIGN;
-        result.append(sequencepadding, static_cast<char>(20));
+        result.append(sequencepadding, static_cast<char>(25)); // Now it is 25 in dinucleotide
         dbsw.writeData(result.c_str(), result.size(), key, thread_idx, false, false);
 
         // + 2 is needed for newline and null character

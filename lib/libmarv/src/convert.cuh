@@ -209,7 +209,7 @@ struct ClampToInvalid{
     __host__ __device__
     #endif
     char operator()(const char& AA) {
-        return AA < 20 ? AA : 20;
+        return AA < 25 ? AA : 25;
     }
 
     //vectorized for 4 values packed in a single int

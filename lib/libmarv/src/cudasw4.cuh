@@ -314,7 +314,7 @@ namespace cudasw4{
                 }
         
                 d_query.resize(1024*1024); CUERR
-                gpuFullQueryPSSM.resize(10000, 21);
+                gpuFullQueryPSSM.resize(10000, 25);
 
                 numTempBytes = std::min(maxTempBytes, gpumemlimit);
                 d_tempStorageHE.resize(numTempBytes);
@@ -457,7 +457,7 @@ namespace cudasw4{
                 }
         
                 d_query.resize(1024*1024); CUERR
-                gpuFullQueryPSSM.resize(10000, 21);
+                gpuFullQueryPSSM.resize(10000, 25);
 
                 numTempBytes = std::min(maxTempBytes, gpumemlimit);
                 d_tempStorageHE.resize(numTempBytes);
@@ -1861,7 +1861,7 @@ namespace cudasw4{
                 if(precomputedPssmOpt.has_value()){
                     const int8_t* precomputedPssm = precomputedPssmOpt.value();
                     if(precomputedPssm == nullptr) throw std::runtime_error("setQuery pssm is nullptr");
-                    return PSSM::fromPSSM(queryView.ptr, queryView.length, precomputedPssm, 21);
+                    return PSSM::fromPSSM(queryView.ptr, queryView.length, precomputedPssm, 25);
                 }else{
                     if constexpr(QueryView::isEncoded){
                         return PSSM::fromBlosum(blosumType, queryView.ptr, queryView.length);
@@ -1879,7 +1879,7 @@ namespace cudasw4{
             }();
 
             // std::cout << "hostFullQueryPSSM\n";
-            // for(int r = 0; r < 21; r++){
+            // for(int r = 0; r < 25; r++){
             //     for(int l = 0; l < queryLength; l++){
             //         std::cout << hostFullQueryPSSM[r][l] << " ";
             //     }
@@ -1891,7 +1891,7 @@ namespace cudasw4{
                 cudaSetDevice(deviceIds[gpu]); CUERR;
                 auto& ws = *workingSets[gpu];
                 ws.d_query.resize(currentQueryLengthWithPadding);
-                cudaMemsetAsync(ws.d_query.data() + currentQueryLength, 20, currentQueryLengthWithPadding - currentQueryLength, gpuStreams[gpu]);
+                cudaMemsetAsync(ws.d_query.data() + currentQueryLength, 25, currentQueryLengthWithPadding - currentQueryLength, gpuStreams[gpu]);
                 cudaMemcpyAsync(ws.d_query.data(), queryView.ptr, currentQueryLength, cudaMemcpyDefault, gpuStreams[gpu]); CUERR
 
                 if constexpr(!QueryView::isEncoded){
