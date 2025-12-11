@@ -45,6 +45,9 @@ private:
     // e value threshold
     const double evalThr;
 
+    // target db size
+    const size_t targetDbSize;
+
     // sequence identity threshold
     const double seqIdThr;
 

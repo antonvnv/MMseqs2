@@ -47,7 +47,7 @@ int transitivealign(int argc, const char **argv, const Command &command) {
     DBWriter resultWriter(tmpRes.c_str(), tmpResIndex.c_str(), par.threads, par.compressed, Parameters::DBTYPE_ALIGNMENT_RES);
     resultWriter.open();
 
-    EvalueComputation evaluer(sequenceDbr.getAminoAcidDBSize(), subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid());
+    EvalueComputation evaluer(par.dbSize == 0 ? sequenceDbr.getAminoAcidDBSize() : par.dbSize, subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid());
     const size_t flushSize = 100000000;
     size_t iterations = static_cast<int>(ceil(static_cast<double>(alnReader.getSize()) / static_cast<double>(flushSize)));
     for (size_t i = 0; i < iterations; i++) {

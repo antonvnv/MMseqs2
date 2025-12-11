@@ -56,7 +56,7 @@ int proteinaln2nucl(int argc, const char **argv, const Command &command) {
     SubstitutionMatrix::FastMatrix fastMatrix = SubstitutionMatrix::createAsciiSubMat(subMat);
     const int gapOpen = par.gapOpen.values.nucleotide();
     const int gapExtend = par.gapExtend.values.nucleotide();
-    EvalueComputation evaluer(tdbr_nuc->getAminoAcidDBSize(), &subMat, gapOpen, gapExtend);
+    EvalueComputation evaluer(par.dbSize == 0 ? tdbr_nuc->getAminoAcidDBSize() : par.dbSize, &subMat, gapOpen, gapExtend);
 
     DBReader<unsigned int> alnDbr(par.db5.c_str(), par.db5Index.c_str(), par.threads, DBReader<unsigned int>::USE_INDEX | DBReader<unsigned int>::USE_DATA);
     alnDbr.open(DBReader<unsigned int>::LINEAR_ACCCESS);

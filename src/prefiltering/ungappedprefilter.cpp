@@ -538,7 +538,7 @@ int prefilterInternal(int argc, const char **argv, const Command &command, int m
     int8_t * tinySubMat;
     if (Parameters::isEqualDbtype(querySeqType, Parameters::DBTYPE_NUCLEOTIDES)) {
         subMat = new NucleotideMatrix(par.scoringMatrixFile.values.nucleotide().c_str(), 1.0, 0.0);
-        evaluer = new EvalueComputation(tdbr->getAminoAcidDBSize(), subMat, par.gapOpen.values.nucleotide(), par.gapExtend.values.nucleotide());
+        evaluer = new EvalueComputation(par.dbSize == 0? tdbr->getAminoAcidDBSize() : par.dbSize, subMat, par.gapOpen.values.nucleotide(), par.gapExtend.values.nucleotide());
         tinySubMat = new int8_t[subMat->alphabetSize*subMat->alphabetSize];
         for (int i = 0; i < subMat->alphabetSize; i++) {
             for (int j = 0; j < subMat->alphabetSize; j++) {
@@ -548,7 +548,7 @@ int prefilterInternal(int argc, const char **argv, const Command &command, int m
     } else {
         // keep score bias at 0.0 (improved ROC)
         subMat = new SubstitutionMatrix(par.scoringMatrixFile.values.aminoacid().c_str(), 2.0, 0.0);
-        evaluer = new EvalueComputation(tdbr->getAminoAcidDBSize(), subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid());
+        evaluer = new EvalueComputation(par.dbSize == 0? tdbr->getAminoAcidDBSize() : par.dbSize, subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid());
         tinySubMat = new int8_t[subMat->alphabetSize*subMat->alphabetSize];
         for (int i = 0; i < subMat->alphabetSize; i++) {
             for (int j = 0; j < subMat->alphabetSize; j++) {

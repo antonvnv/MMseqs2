@@ -166,7 +166,7 @@ int expandaln(int argc, const char **argv, const Command& command, bool returnAl
     if (returnAlnRes == false) {
         probMatrix = new ProbabilityMatrix(subMat);
     } else {
-        evaluer = new EvalueComputation(cReader->getAminoAcidDBSize(), &subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid());
+        evaluer = new EvalueComputation(par.dbSize == 0 ? cReader->getAminoAcidDBSize() : par.dbSize, &subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid());
     }
     Debug::Progress progress(resultAbReader->getSize());
 #pragma omp parallel num_threads(localThreads)

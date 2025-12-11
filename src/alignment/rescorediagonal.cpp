@@ -104,7 +104,7 @@ int doRescorediagonal(Parameters &par,
         scorePerColThr = parsePrecisionLib(libraryString, par.seqIdThr, par.covThr, 0.99);
     }
     bool reversePrefilterResult = (Parameters::isEqualDbtype(resultReader.getDbtype(), Parameters::DBTYPE_PREFILTER_REV_RES));
-    EvalueComputation evaluer(tdbr->getAminoAcidDBSize(), subMat);
+    EvalueComputation evaluer(par.dbSize == 0? tdbr->getAminoAcidDBSize() : par.dbSize, subMat);
 
     size_t totalMemory = Util::getTotalSystemMemory();
     size_t flushSize = 100000000;

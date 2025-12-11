@@ -21,7 +21,7 @@
 Alignment::Alignment(const std::string &querySeqDB, const std::string &targetSeqDB,
                      const std::string &prefDB, const std::string &prefDBIndex,
                      const std::string &outDB, const std::string &outDBIndex, const Parameters &par, const bool lcaAlign) :
-        covThr(par.covThr), canCovThr(par.covThr), covMode(par.covMode), seqIdMode(par.seqIdMode), evalThr(par.evalThr), seqIdThr(par.seqIdThr),
+        covThr(par.covThr), canCovThr(par.covThr), covMode(par.covMode), seqIdMode(par.seqIdMode), evalThr(par.evalThr), targetDbSize(par.dbSize), seqIdThr(par.seqIdThr),
         alnLenThr(par.alnLenThr), includeIdentity(par.includeIdentity), addBacktrace(par.addBacktrace), realign(par.realign), scoreBias(par.scoreBias), realignScoreBias(par.realignScoreBias), realignMaxSeqs(par.realignMaxSeqs),
         threads(static_cast<unsigned int>(par.threads)), compressed(par.compressed), outDB(outDB), outDBIndex(outDBIndex),
         maxSeqLen(par.maxSeqLen), compBiasCorrection(par.compBiasCorrection), forceCompBias(par.forceCompBiasCorrection), compBiasCorrectionScale(par.compBiasCorrectionScale), remapProfile(par.remapProfile), altAlignment(par.altAlignment), alignmentOutputMode(par.alignmentOutputMode),
@@ -272,7 +272,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
         return;
     }
 
-    EvalueComputation evaluer(tdbr->getAminoAcidDBSize(), this->m, gapOpen, gapExtend);
+    EvalueComputation evaluer(targetDbSize == 0? tdbr->getAminoAcidDBSize() : targetDbSize, this->m, gapOpen, gapExtend);
 
     size_t totalMemory = Util::getTotalSystemMemory();
     size_t flushSize = 1000000;

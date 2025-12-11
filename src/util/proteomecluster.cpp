@@ -477,7 +477,7 @@ int proteomecluster(int argc, const char **argv, const Command &command){
     SubstitutionMatrix subMat(par.scoringMatrixFile.values.aminoacid().c_str(), 2.0, par.scoreBias);
     gapOpen = par.gapOpen.values.aminoacid();
     gapExtend = par.gapExtend.values.aminoacid();
-    EvalueComputation evaluer(tProteinDB.getAminoAcidDBSize(), &subMat, gapOpen, gapExtend);
+    EvalueComputation evaluer(par.dbSize == 0 ? tProteinDB.getAminoAcidDBSize() : par.dbSize, &subMat, gapOpen, gapExtend);
     
     
     Debug(Debug::INFO) << "Start Proteome Clustering " << "\n";

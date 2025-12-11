@@ -74,6 +74,7 @@ Parameters::Parameters():
         PARAM_ALIGNMENT_MODE(PARAM_ALIGNMENT_MODE_ID, "--alignment-mode", "Alignment mode", "How to compute the alignment:\n0: automatic\n1: only score and end_pos\n2: also start_pos and cov\n3: also seq.id\n4: only ungapped alignment", typeid(int), (void *) &alignmentMode, "^[0-5]{1}$", MMseqsParameter::COMMAND_ALIGN),
         PARAM_ALIGNMENT_OUTPUT_MODE(PARAM_ALIGNMENT_OUTPUT_MODE_ID, "--alignment-output-mode", "Alignment mode", "How to compute the alignment:\n0: automatic\n1: only score and end_pos\n2: also start_pos and cov\n3: also seq.id\n4: only ungapped alignment\n5: score only (output) cluster format", typeid(int), (void *) &alignmentOutputMode, "^[0-1]{1}$", MMseqsParameter::COMMAND_ALIGN),
         PARAM_E(PARAM_E_ID, "-e", "E-value threshold", "List matches below this E-value (range 0.0-inf)", typeid(double), (void *) &evalThr, "^([-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?)|[0-9]*(\\.[0-9]+)?$", MMseqsParameter::COMMAND_ALIGN),
+        PARAM_DB_SIZE(PARAM_DB_SIZE_ID, "--db-size", "Target database size", "Effective target database size for E-value computation (in number of residues). Only work when it is set above 0, otherwise it will use the input target database size", typeid(size_t), (void *) &dbSize, "^[1-9]{1}[0-9]*$", MMseqsParameter::COMMAND_ALIGN | MMseqsParameter::COMMAND_EXPERT),
         PARAM_C(PARAM_C_ID, "-c", "Coverage threshold", "List matches above this fraction of aligned (covered) residues (see --cov-mode)", typeid(float), (void *) &covThr, "^0(\\.[0-9]+)?|^1(\\.0+)?$", MMseqsParameter::COMMAND_ALIGN | MMseqsParameter::COMMAND_CLUSTLINEAR),
         PARAM_COV_MODE(PARAM_COV_MODE_ID, "--cov-mode", "Coverage mode", "0: coverage of query and target\n1: coverage of target\n2: coverage of query\n3: target seq. length has to be at least x% of query length\n4: query seq. length has to be at least x% of target length\n5: short seq. needs to be at least x% of the other seq. length", typeid(int), (void *) &covMode, "^[0-5]{1}$", MMseqsParameter::COMMAND_ALIGN),
         PARAM_SEQ_ID_MODE(PARAM_SEQ_ID_MODE_ID, "--seq-id-mode", "Seq. id. mode", "0: alignment length 1: shorter, 2: longer sequence", typeid(int), (void *) &seqIdMode, "^[0-2]{1}$", MMseqsParameter::COMMAND_ALIGN),
@@ -374,6 +375,7 @@ Parameters::Parameters():
     alignall.push_back(&PARAM_ALIGNMENT_MODE);
 //    alignall.push_back(&PARAM_WRAPPED_SCORING);
     alignall.push_back(&PARAM_E);
+    alignall.push_back(&PARAM_DB_SIZE);
     alignall.push_back(&PARAM_MIN_SEQ_ID);
     alignall.push_back(&PARAM_MIN_ALN_LEN);
     alignall.push_back(&PARAM_SEQ_ID_MODE);
@@ -406,6 +408,7 @@ Parameters::Parameters():
     align.push_back(&PARAM_ALIGNMENT_OUTPUT_MODE);
     align.push_back(&PARAM_WRAPPED_SCORING);
     align.push_back(&PARAM_E);
+    align.push_back(&PARAM_DB_SIZE);
     align.push_back(&PARAM_MIN_SEQ_ID);
     align.push_back(&PARAM_MIN_ALN_LEN);
     align.push_back(&PARAM_SEQ_ID_MODE);
@@ -478,6 +481,7 @@ Parameters::Parameters():
     ungappedprefilter.push_back(&PARAM_SUB_MAT);
     ungappedprefilter.push_back(&PARAM_C);
     ungappedprefilter.push_back(&PARAM_E);
+    ungappedprefilter.push_back(&PARAM_DB_SIZE);
     ungappedprefilter.push_back(&PARAM_COV_MODE);
     ungappedprefilter.push_back(&PARAM_NO_COMP_BIAS_CORR);
     ungappedprefilter.push_back(&PARAM_NO_FORCE_COMP_BIAS_CORR);
@@ -500,6 +504,7 @@ Parameters::Parameters():
     gappedprefilter.push_back(&PARAM_GAP_OPEN);
     gappedprefilter.push_back(&PARAM_GAP_EXTEND);
     gappedprefilter.push_back(&PARAM_E);
+    gappedprefilter.push_back(&PARAM_DB_SIZE);
     gappedprefilter.push_back(&PARAM_C);
     gappedprefilter.push_back(&PARAM_COV_MODE);
     gappedprefilter.push_back(&PARAM_NO_COMP_BIAS_CORR);
@@ -530,6 +535,7 @@ Parameters::Parameters():
     rescorediagonal.push_back(&PARAM_WRAPPED_SCORING);
     rescorediagonal.push_back(&PARAM_FILTER_HITS);
     rescorediagonal.push_back(&PARAM_E);
+    rescorediagonal.push_back(&PARAM_DB_SIZE);
     rescorediagonal.push_back(&PARAM_C);
     rescorediagonal.push_back(&PARAM_ADD_BACKTRACE);
     rescorediagonal.push_back(&PARAM_COV_MODE);
@@ -552,6 +558,7 @@ Parameters::Parameters():
     alignbykmer.push_back(&PARAM_FILTER_HITS);
     alignbykmer.push_back(&PARAM_C);
     alignbykmer.push_back(&PARAM_E);
+    alignbykmer.push_back(&PARAM_DB_SIZE);
     alignbykmer.push_back(&PARAM_COV_MODE);
     alignbykmer.push_back(&PARAM_MIN_SEQ_ID);
     alignbykmer.push_back(&PARAM_MIN_ALN_LEN);
@@ -585,6 +592,7 @@ Parameters::Parameters():
     // result2profile
     result2profile.push_back(&PARAM_SUB_MAT);
     result2profile.push_back(&PARAM_E);
+    result2profile.push_back(&PARAM_DB_SIZE);
     result2profile.push_back(&PARAM_MASK_PROFILE);
     result2profile.push_back(&PARAM_E_PROFILE);
     result2profile.push_back(&PARAM_NO_COMP_BIAS_CORR);
@@ -1011,6 +1019,7 @@ Parameters::Parameters():
     // swap results
     swapresult.push_back(&PARAM_SUB_MAT);
     swapresult.push_back(&PARAM_E);
+    swapresult.push_back(&PARAM_DB_SIZE);
     swapresult.push_back(&PARAM_SPLIT_MEMORY_LIMIT);
     swapresult.push_back(&PARAM_GAP_OPEN);
     swapresult.push_back(&PARAM_GAP_EXTEND);
@@ -1029,6 +1038,7 @@ Parameters::Parameters():
     subtractdbs.push_back(&PARAM_THREADS);
     subtractdbs.push_back(&PARAM_E_PROFILE);
     subtractdbs.push_back(&PARAM_E);
+    subtractdbs.push_back(&PARAM_DB_SIZE);
     subtractdbs.push_back(&PARAM_COMPRESSED);
     subtractdbs.push_back(&PARAM_V);
 
@@ -1136,6 +1146,7 @@ Parameters::Parameters():
     // summarizetabs
     summarizetabs.push_back(&PARAM_OVERLAP);
     summarizetabs.push_back(&PARAM_E);
+    summarizetabs.push_back(&PARAM_DB_SIZE);
     summarizetabs.push_back(&PARAM_C);
     summarizetabs.push_back(&PARAM_THREADS);
     summarizetabs.push_back(&PARAM_COMPRESSED);
@@ -1145,6 +1156,7 @@ Parameters::Parameters():
     extractdomains.push_back(&PARAM_SUB_MAT);
     extractdomains.push_back(&PARAM_MSA_TYPE);
     extractdomains.push_back(&PARAM_E);
+    extractdomains.push_back(&PARAM_DB_SIZE);
     extractdomains.push_back(&PARAM_C);
     extractdomains.push_back(&PARAM_THREADS);
     extractdomains.push_back(&PARAM_COMPRESSED);
@@ -1267,6 +1279,7 @@ Parameters::Parameters():
     expandaln.push_back(&PARAM_NO_COMP_BIAS_CORR);
     expandaln.push_back(&PARAM_NO_COMP_BIAS_CORR_SCALE);
     expandaln.push_back(&PARAM_E);
+    expandaln.push_back(&PARAM_DB_SIZE);
     expandaln.push_back(&PARAM_MIN_SEQ_ID);
 //    expandaln.push_back(&PARAM_MIN_SEQ_ID);
 //    expandaln.push_back(&PARAM_SEQ_ID_MODE);
@@ -1346,6 +1359,7 @@ Parameters::Parameters():
     fwbw.push_back(&PARAM_BLOCKLEN);
     fwbw.push_back(&PARAM_FWBW_BACKTRACE_MODE);
     fwbw.push_back(&PARAM_E);
+    fwbw.push_back(&PARAM_DB_SIZE);
     fwbw.push_back(&PARAM_MIN_SEQ_ID);
     fwbw.push_back(&PARAM_MIN_ALN_LEN);
     fwbw.push_back(&PARAM_SEQ_ID_MODE);
@@ -1361,6 +1375,7 @@ Parameters::Parameters():
     proteomecluster.push_back(&PARAM_ALIGNMENT_MODE);
     proteomecluster.push_back(&PARAM_REALIGN_SCORE_BIAS); 
     proteomecluster.push_back(&PARAM_E);
+    proteomecluster.push_back(&PARAM_DB_SIZE);
     proteomecluster.push_back(&PARAM_MIN_SEQ_ID);
     proteomecluster.push_back(&PARAM_MIN_ALN_LEN);
     proteomecluster.push_back(&PARAM_SEQ_ID_MODE);
@@ -2491,6 +2506,7 @@ void Parameters::setDefaults() {
     alignmentMode = ALIGNMENT_MODE_FAST_AUTO;
     alignmentOutputMode = ALIGNMENT_OUTPUT_ALIGNMENT;
     evalThr = 0.001;
+    dbSize = 0;
     covThr = 0.0;
     covMode = COV_MODE_BIDIRECTIONAL;
     seqIdMode = SEQ_ID_ALN_LEN;

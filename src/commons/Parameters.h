@@ -452,6 +452,7 @@ public:
                                          // 1=score only, 2=score, cov, start/end pos, 3=score, cov, start/end pos, seq.id,
     int alignmentOutputMode;             // alignment output mode 0=alignment, 1=cluster
     double evalThr;                      // e-value threshold for acceptance
+    size_t dbSize;                       // target database size for e-value computation
     float  covThr;                       // coverage query&target threshold for acceptance
     int    covMode;                      // coverage target threshold for acceptance
     int    seqIdMode;                    // seq. id. normalize mode
@@ -830,6 +831,7 @@ public:
     PARAMETER(PARAM_ALIGNMENT_MODE)
     PARAMETER(PARAM_ALIGNMENT_OUTPUT_MODE)
     PARAMETER(PARAM_E)
+    PARAMETER(PARAM_DB_SIZE)
     PARAMETER(PARAM_C)
     PARAMETER(PARAM_COV_MODE)
     PARAMETER(PARAM_SEQ_ID_MODE)
