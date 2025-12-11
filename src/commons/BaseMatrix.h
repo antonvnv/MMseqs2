@@ -18,6 +18,7 @@ public:
 
     /* remove non-canonical nucleotides */
     unsigned char* revcomp;
+    unsigned char* head;
     unsigned char* tail;
 
     /* from dinucleotide to the first or the second nucleotide */

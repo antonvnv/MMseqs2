@@ -487,6 +487,33 @@ void SubstitutionMatrix::setupDinucleotideLetterMapping(){
     this->revcomp[this->aa2num[(int)'O']] = this->aa2num[(int)'V'];
     this->revcomp[this->aa2num[(int)'U']] = this->aa2num[(int)'T'];
     this->revcomp[this->aa2num[(int)'X']] = this->aa2num[(int)'X'];
+
+    // Set up head
+    /* {'C': 'B', 'G': 'B', 'L': 'B', 'Q': 'B',
+        'D': 'J', 'F': 'J', 'R': 'J', 'K': 'J',
+        'M': 'O', 'A': 'O', 'P': 'O', 'I': 'O',
+        'E': 'U', 'N': 'U', 'H': 'U', 'S': 'U'
+        'T': 'B', 'V': 'J', 'W': 'O', 'Y': 'U', 'REST': 'X'} */
+    this->head[this->aa2num[(int)'C']] = this->aa2num[(int)'B'];
+    this->head[this->aa2num[(int)'G']] = this->aa2num[(int)'B'];
+    this->head[this->aa2num[(int)'L']] = this->aa2num[(int)'B'];
+    this->head[this->aa2num[(int)'Q']] = this->aa2num[(int)'B'];
+    this->head[this->aa2num[(int)'D']] = this->aa2num[(int)'J'];
+    this->head[this->aa2num[(int)'F']] = this->aa2num[(int)'J'];
+    this->head[this->aa2num[(int)'R']] = this->aa2num[(int)'J'];
+    this->head[this->aa2num[(int)'K']] = this->aa2num[(int)'J'];
+    this->head[this->aa2num[(int)'M']] = this->aa2num[(int)'O'];
+    this->head[this->aa2num[(int)'A']] = this->aa2num[(int)'O'];
+    this->head[this->aa2num[(int)'P']] = this->aa2num[(int)'O'];
+    this->head[this->aa2num[(int)'I']] = this->aa2num[(int)'O'];
+    this->head[this->aa2num[(int)'E']] = this->aa2num[(int)'U'];
+    this->head[this->aa2num[(int)'N']] = this->aa2num[(int)'U'];
+    this->head[this->aa2num[(int)'H']] = this->aa2num[(int)'U'];
+    this->head[this->aa2num[(int)'S']] = this->aa2num[(int)'U'];
+    this->head[this->aa2num[(int)'T']] = this->aa2num[(int)'B'];
+    this->head[this->aa2num[(int)'V']] = this->aa2num[(int)'J'];
+    this->head[this->aa2num[(int)'W']] = this->aa2num[(int)'O'];
+    this->head[this->aa2num[(int)'Y']] = this->aa2num[(int)'U'];
     
     // Set up tail
     /* {'C': 'T', 'G': 'V', 'L': 'W', 'Q': 'Y',

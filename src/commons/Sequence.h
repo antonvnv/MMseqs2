@@ -80,7 +80,7 @@ public:
     ~Sequence();
 
     // Map char -> int
-    void mapSequence(size_t id, unsigned int dbKey, const char *seq, unsigned int seqLen, bool remap=false, BaseMatrix* alignSubMat=NULL, bool reverse=false, bool forceCompBias=false, float scale=1.0f);
+    void mapSequence(size_t id, unsigned int dbKey, const char *seq, unsigned int seqLen, bool remap=false, BaseMatrix* alignSubMat=NULL, bool reverse=false, bool forceCompBias=false, float scale=1.0f, bool padded=false);
 
     // map sequence from SequenceLookup
     void mapSequence(size_t id, unsigned int dbKey, std::pair<const unsigned char *, const unsigned int> data);
@@ -557,6 +557,7 @@ public:
 
 private:
     void mapSequence(const char *seq, unsigned int dataLen);
+    void mapSequence(const char *seq, unsigned int dataLen, bool reverse);
     void mapSequenceReverse(const char *seq, unsigned int dataLen);
     // read next kmer profile in profile_matrix
     void nextProfileKmer();

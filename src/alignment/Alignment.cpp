@@ -382,7 +382,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
                         Debug(Debug::ERROR) << "Sequence " << dbKey << " is required in the prefiltering, but is not contained in the target sequence database!\nPlease check your database.\n";
                         EXIT(EXIT_FAILURE);
                     }
-                    dbSeq.mapSequence(dbId, dbKey, dbSeqData, tdbr->getSeqLen(dbId), false, NULL, reverse);
+                    dbSeq.mapSequence(dbId, dbKey, dbSeqData, tdbr->getSeqLen(dbId), false, NULL, reverse, false, 1.0f, tdbr->isPadded());
 
                     // check if the sequences could pass the coverage threshold
                     if (Util::canBeCovered(canCovThr, covMode, static_cast<float>(origQueryLen), static_cast<float>(dbSeq.L)) == false) {
@@ -438,7 +438,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
                             Debug(Debug::ERROR) << "Sequence " << swResults[result].dbKey <<" is required in the prefiltering, but is not contained in the target sequence database!\nPlease check your database.\n";
                             EXIT(EXIT_FAILURE);
                         }
-                        dbSeq.mapSequence(dbId, swResults[result].dbKey, dbSeqData, tdbr->getSeqLen(dbId), false, NULL, reverse);
+                        dbSeq.mapSequence(dbId, swResults[result].dbKey, dbSeqData, tdbr->getSeqLen(dbId), false, NULL, reverse, false, 1.0f, tdbr->isPadded());
 
                         // recompute alignment boundaries (without changing evalue)
                         const bool isIdentity = (queryDbKey == swResults[result].dbKey && (includeIdentity || sameQTDB)) ? true : false;
@@ -501,7 +501,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
                             Debug(Debug::ERROR) << "Sequence " << dbKey << " is required in the prefiltering, but is not contained in the target sequence database!\nPlease check your database.\n";
                             EXIT(EXIT_FAILURE);
                         }
-                        dbSeq.mapSequence(dbId, dbKey, dbSeqData, tdbr->getSeqLen(dbId), false, NULL, reverse);
+                        dbSeq.mapSequence(dbId, dbKey, dbSeqData, tdbr->getSeqLen(dbId), false, NULL, reverse, false, 1.0f, tdbr->isPadded());
 
                         Matcher::result_t res = realigner->getSWResult(&dbSeq, INT_MAX, false, covMode, realignCov, topHitEval, lcaSwMode, seqIdMode, false, false, reverse);
 

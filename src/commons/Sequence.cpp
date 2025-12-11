@@ -200,11 +200,15 @@ std::pair<const char *, unsigned int> Sequence::parseSpacedPattern(unsigned int 
     return std::make_pair<const char *, unsigned int>((const char *) pattern, spacedKmerPattern.size());
 }
 
-void Sequence::mapSequence(size_t id, unsigned int dbKey, const char *sequence, unsigned int seqLen, bool remap, BaseMatrix* alignSubMat, bool reverse, bool forceCompBias, float scale) {
+void Sequence::mapSequence(size_t id, unsigned int dbKey, const char *sequence, unsigned int seqLen, bool remap, BaseMatrix* alignSubMat, bool reverse, bool forceCompBias, float scale, bool padded) {
     this->id = id;
     this->dbKey = dbKey;
     this->seqData = sequence;
     if (Parameters::isEqualDbtype(this->seqType, Parameters::DBTYPE_AMINO_ACIDS) || Parameters::isEqualDbtype(this->seqType, Parameters::DBTYPE_NUCLEOTIDES)) {
+        if (padded) {
+            mapSequence(sequence, seqLen, reverse);
+            return;
+        }
         if (reverse) {
             mapSequenceReverse(sequence, seqLen);
         } else {
@@ -441,6 +445,40 @@ void Sequence::mapSequence(const char* __restrict sequence, unsigned int dataLen
     numSequence[i] = aa2num[idx];
 
     this->L = i+1;
+}
+
+void Sequence::mapSequence(const char* __restrict sequence, unsigned int dataLen, bool reverse) {
+    if(dataLen >= maxLen){
+        numSequence = static_cast<unsigned char*>(realloc(numSequence, dataLen+1));
+        maxLen = dataLen;
+    }
+    const unsigned char* lookup = subMat->aa2num;  // local pointer for speed
+    unsigned int i = 0;
+    if (reverse) {
+        // Only the first index is different
+        numSequence[i] = subMat->head[lookup[(unsigned char)sequence[i]]];
+        i++;
+        for (; i + 4 <= dataLen; i += 4) {
+            numSequence[i]   = lookup[(unsigned char)sequence[i-1]];
+            numSequence[i+1] = lookup[(unsigned char)sequence[i]];
+            numSequence[i+2] = lookup[(unsigned char)sequence[i+1]];
+            numSequence[i+3] = lookup[(unsigned char)sequence[i+2]];
+        }
+        for (; i < dataLen; i++) {
+            numSequence[i]   = lookup[(unsigned char)sequence[i-1]];
+        }
+    } else {
+        for (; i + 4 <= dataLen; i += 4) {
+            numSequence[i]   = lookup[(unsigned char)sequence[i]];
+            numSequence[i+1] = lookup[(unsigned char)sequence[i+1]];
+            numSequence[i+2] = lookup[(unsigned char)sequence[i+2]];
+            numSequence[i+3] = lookup[(unsigned char)sequence[i+3]];
+        }
+        for (; i < dataLen; i++) {
+            numSequence[i]   = lookup[(unsigned char)sequence[i]];
+        }
+    }
+    this->L = i;
 }
 
 void Sequence::mapSequenceReverse(const char* __restrict sequence, unsigned int dataLen) {

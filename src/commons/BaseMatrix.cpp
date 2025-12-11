@@ -23,7 +23,11 @@ BaseMatrix::BaseMatrix(){
     for (int i = 0; i < 25; ++i) {
         revcomp[i] = static_cast<unsigned char>('X');
     }
-    // To handle the last incomplete dinucleotide
+    // To handle the first and the last incomplete dinucleotide
+    head = new unsigned char[25];
+    for (int i = 0; i < 25; ++i) {
+        head[i] = static_cast<unsigned char>('X');
+    }
     tail = new unsigned char[25];
     for (int i = 0; i < 25; ++i) {
         tail[i] = static_cast<unsigned char>('X');
@@ -36,6 +40,7 @@ BaseMatrix::~BaseMatrix(){
     delete[] num2aa;
     delete[] aa2num;
     delete[] revcomp;
+    delete[] head;
     delete[] tail;
     delete[] dinucToNuc;
     delete[] pBack;
