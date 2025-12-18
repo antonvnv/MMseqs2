@@ -620,6 +620,34 @@ Parameters::Parameters():
     result2profile.push_back(&PARAM_V);
     result2profile.push_back(&PARAM_PROFILE_OUTPUT_MODE);
 
+    // results2profile
+    results2profile.push_back(&PARAM_SUB_MAT);
+    results2profile.push_back(&PARAM_E);
+    results2profile.push_back(&PARAM_DB_SIZE);
+    results2profile.push_back(&PARAM_MASK_PROFILE);
+    results2profile.push_back(&PARAM_E_PROFILE);
+    results2profile.push_back(&PARAM_NO_COMP_BIAS_CORR);
+    results2profile.push_back(&PARAM_NO_COMP_BIAS_CORR_SCALE);
+    results2profile.push_back(&PARAM_WG);
+    results2profile.push_back(&PARAM_ALLOW_DELETION);
+    results2profile.push_back(&PARAM_FILTER_MSA);
+    results2profile.push_back(&PARAM_FILTER_MIN_ENABLE);
+    results2profile.push_back(&PARAM_FILTER_MAX_SEQ_ID);
+    results2profile.push_back(&PARAM_FILTER_QID);
+    results2profile.push_back(&PARAM_FILTER_QSC);
+    results2profile.push_back(&PARAM_FILTER_COV);
+    results2profile.push_back(&PARAM_FILTER_NDIFF);
+    results2profile.push_back(&PARAM_PC_MODE);
+    results2profile.push_back(&PARAM_PCA);
+    results2profile.push_back(&PARAM_PCB);
+    results2profile.push_back(&PARAM_PRELOAD_MODE);
+    results2profile.push_back(&PARAM_GAP_OPEN);
+    results2profile.push_back(&PARAM_GAP_EXTEND);
+    results2profile.push_back(&PARAM_THREADS);
+    results2profile.push_back(&PARAM_COMPRESSED);
+    results2profile.push_back(&PARAM_V);
+    results2profile.push_back(&PARAM_PROFILE_OUTPUT_MODE);
+
     // createtsv
     createtsv.push_back(&PARAM_FIRST_SEQ_REP_SEQ);
     createtsv.push_back(&PARAM_TARGET_COLUMN);
@@ -1428,6 +1456,9 @@ Parameters::Parameters():
     searchworkflow.push_back(&PARAM_REUSELATEST);
     searchworkflow.push_back(&PARAM_REMOVE_TMP_FILES);
     searchworkflow.push_back(&PARAM_TRANSLATION_MODE);
+
+    // splitsearch
+    std::copy(searchworkflow.begin(), searchworkflow.end(), std::back_inserter(splitsearchworkflow));
 
     linsearchworkflow = combineList(align, kmersearch);
     linsearchworkflow = combineList(linsearchworkflow, swapresult);

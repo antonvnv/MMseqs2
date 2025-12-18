@@ -256,7 +256,7 @@ int result2msa(int argc, const char **argv, const Command &command) {
                 if (alnResults.back().qStartPos > alnResults.back().qEndPos) {
                     reverse = true;
                 }
-                edgeSequence.mapSequence(edgeId, key, tDbr->getData(edgeId, thread_idx), tDbr->getSeqLen(edgeId), false, NULL, reverse);
+                edgeSequence.mapSequence(edgeId, key, tDbr->getData(edgeId, thread_idx), tDbr->getSeqLen(edgeId), false, NULL, reverse, false, 1.0f, tDbr->isPadded());
                 seqSet.emplace_back(std::vector<unsigned char>(edgeSequence.numSequence, edgeSequence.numSequence + edgeSequence.L));
                 seqKeys.emplace_back(key);
                 data = Util::skipLine(data);

@@ -55,6 +55,7 @@ set(util_source_files
         util/result2msa.cpp
         util/result2rbh.cpp
         util/result2profile.cpp
+        util/results2profile.cpp
         util/result2repseq.cpp
         util/result2stats.cpp
         util/reverseseq.cpp

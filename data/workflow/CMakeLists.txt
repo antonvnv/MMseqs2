@@ -5,6 +5,7 @@ set(GENERATED_WORKFLOWS
         workflow/easyrbh.sh
         workflow/easyproteomecluster.sh
         workflow/blastp.sh
+	workflow/blastsplitp.sh
         workflow/blastpgp.sh
         workflow/map.sh
         workflow/rbh.sh
@@ -22,7 +23,9 @@ set(GENERATED_WORKFLOWS
         workflow/enrich.sh
         workflow/blastn.sh
 	workflow/blastdi.sh
+        workflow/blastsplitdi.sh
         workflow/blastdigp.sh
+        workflow/blastsplitdigp.sh
         workflow/searchslicedtargetprofile.sh
         workflow/taxonomy.sh
         workflow/linsearch.sh

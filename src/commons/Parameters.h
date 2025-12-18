@@ -1179,6 +1179,7 @@ public:
     std::vector<MMseqsParameter*> convertprofiledb;
     std::vector<MMseqsParameter*> sequence2profile;
     std::vector<MMseqsParameter*> result2profile;
+    std::vector<MMseqsParameter*> results2profile;
     std::vector<MMseqsParameter*> result2msa;
     std::vector<MMseqsParameter*> result2dnamsa;
     std::vector<MMseqsParameter*> filtera3m;
@@ -1214,6 +1215,7 @@ public:
     std::vector<MMseqsParameter*> linclustworkflow;
     std::vector<MMseqsParameter*> easysearchworkflow;
     std::vector<MMseqsParameter*> searchworkflow;
+    std::vector<MMseqsParameter*> splitsearchworkflow;
     std::vector<MMseqsParameter*> linsearchworkflow;
     std::vector<MMseqsParameter*> easylinsearchworkflow;
     std::vector<MMseqsParameter*> mapworkflow;

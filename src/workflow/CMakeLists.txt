@@ -13,6 +13,7 @@ set(workflow_source_files
         workflow/Map.cpp
         workflow/Rbh.cpp
         workflow/Search.cpp
+        workflow/SplitSearch.cpp
         workflow/Taxonomy.cpp
         workflow/PickConsensusRep.cpp
         workflow/EasyTaxonomy.cpp
