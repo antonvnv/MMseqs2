@@ -16,6 +16,7 @@ notExists() {
 # check if files exist
 cur=1
 last=$(( $# - 2 ))
+chk=""
 while [ "$cur" -le "$last" ]; do
     eval "chk=\${$cur}"
     [ ! -f "${chk}.dbtype" ] &&  echo "${chk}.dbtype not found!" && exit 1;

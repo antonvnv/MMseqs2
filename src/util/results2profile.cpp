@@ -41,26 +41,71 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
     }
     std::sort(qid_vec.begin(), qid_vec.end());
 
-    DBReader<unsigned int> resultReader(par.db3.c_str(), par.db3Index.c_str(), par.threads, DBReader<unsigned int>::USE_DATA | DBReader<unsigned int>::USE_INDEX);
-    resultReader.open(DBReader<unsigned int>::LINEAR_ACCCESS);
+    DBReader<unsigned int> *tDbr = NULL;
+    IndexReader *tDbrIdx = NULL;
+    
+    // vector of targetdbs and resultdbs
+    std::vector<std::string> targetDbPaths, resultDbPaths;
+    // Make sure that the length of par.filenames is even
+    if (par.filenames.size() % 2 != 0) {
+        Debug(Debug::ERROR) << "Internal error: DB paths not provided appropriately, please check the input again\n";
+        return EXIT_FAILURE;
+    }
+    size_t i = 1;
+    for (; i < par.filenames.size() / 2; i++) {
+        targetDbPaths.push_back(par.filenames[i]);
+    }
+    for (; i < par.filenames.size() - 1; i++) {
+        resultDbPaths.push_back(par.filenames[i]);
+    }
+
+    std::vector<DBReader<unsigned int>*> resultDbrs;
+    DBReader<unsigned int> *resultDbr = NULL;
+    std::vector<std::vector<unsigned int>> resultDbIds;
+    resultDbIds.reserve(resultDbPaths.size());
+
+    for (size_t i = 0; i < resultDbPaths.size(); i++) {
+        resultDbr = new DBReader<unsigned int>(resultDbPaths[i].c_str(), (resultDbPaths[i] + ".index").c_str(), par.threads, DBReader<unsigned int>::USE_DATA | DBReader<unsigned int>::USE_INDEX);
+        resultDbr->open(DBReader<unsigned int>::LINEAR_ACCCESS);
+        resultDbrs.push_back(resultDbr);
+    }
     size_t dbFrom = 0;
     size_t dbSize = 0;
 #ifdef HAVE_MPI
-    resultReader.decomposeDomainByAminoAcid(MMseqsMPI::rank, MMseqsMPI::numProc, &dbFrom, &dbSize);
+    resultDbrs[0].decomposeDomainByAminoAcid(MMseqsMPI::rank, MMseqsMPI::numProc, &dbFrom, &dbSize);
     Debug(Debug::INFO) << "Compute split from " << dbFrom << " to " << dbFrom + dbSize << "\n";
-    std::pair<std::string, std::string> tmpOutput = Util::createTmpFileNames(par.db4, par.db4Index, MMseqsMPI::rank);
+    std::pair<std::string, std::string> tmpOutput = Util::createTmpFileNames(par.filenames[par.filenames.size() - 1], par.filenames[par.filenames.size() - 1] + ".index", MMseqsMPI::rank);
 #else
-    dbSize = resultReader.getSize();
-    std::pair<std::string, std::string> tmpOutput = std::make_pair(par.db4, par.db4Index);
+    dbSize = resultDbrs[0]->getSize(); // getSize should be same for all result DBs
+    std::pair<std::string, std::string> tmpOutput = std::make_pair(par.filenames[par.filenames.size() - 1], par.filenames[par.filenames.size() - 1] + ".index");
 #endif
+
+    // reserve dbSize in each of the resultDbIds
+    for (size_t i = 0; i < resultDbrs.size(); i++) {
+        resultDbIds.push_back(std::vector<unsigned int>());
+        resultDbIds[i].reserve(dbSize);
+        for (size_t j = 0; j < dbSize; j++) {
+            resultDbIds[i].push_back(UINT_MAX);
+        }
+    }
+
+    // save the resultDb ids to the queryKeys
+    for (size_t i = 0; i < resultDbrs.size(); i++) {
+        DBReader<unsigned int> *currentDbr = resultDbrs[i];
+        for (size_t id = dbFrom; id < (dbFrom + dbSize); id++) {
+            unsigned int queryKey = currentDbr->getDbKey(id);
+            resultDbIds[i][queryKey] = id;
+        }
+    }
 
     size_t localThreads = 1;
 #ifdef OPENMP
-    localThreads = std::max(std::min((size_t)par.threads, resultReader.getSize()), (size_t)1);
+    localThreads = std::max(std::min((size_t)par.threads, dbSize), (size_t)1);
 #endif
 
-    DBReader<unsigned int> *tDbr = NULL;
-    IndexReader *tDbrIdx = NULL;
+    // vector of DBReader
+    std::vector<DBReader<unsigned int>*> tDbrs;
+    std::vector<IndexReader*> tDbrIdxs;
     bool templateDBIsIndex = false;
     bool needSrcIndex = false;
     int targetSeqType = -1;
@@ -78,8 +123,13 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
     }
 
     if (templateDBIsIndex == false) {
-        tDbr = new DBReader<unsigned int>(par.db2.c_str(), par.db2Index.c_str(), par.threads, DBReader<unsigned int>::USE_INDEX | DBReader<unsigned int>::USE_DATA);
-        tDbr->open(DBReader<unsigned int>::NOSORT);
+        // Iterate through targetDbPaths
+        for (size_t i = 0; i < targetDbPaths.size(); i++) {
+            // tDbr = new DBReader<unsigned int>(par.db2.c_str(), par.db2Index.c_str(), par.threads, DBReader<unsigned int>::USE_INDEX | DBReader<unsigned int>::USE_DATA);
+            tDbr = new DBReader<unsigned int>(targetDbPaths[i].c_str(), (targetDbPaths[i] + ".index").c_str(), par.threads, DBReader<unsigned int>::USE_INDEX | DBReader<unsigned int>::USE_DATA);
+            tDbr->open(DBReader<unsigned int>::NOSORT);
+            tDbrs.push_back(tDbr);
+        }
         targetSeqType = tDbr->getDbtype();
     }
 
@@ -94,13 +144,22 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
     } else {
         qDbr = tDbr;
     }
-    const unsigned int maxSequenceLength = std::max(tDbr->getMaxSeqLen(), qDbr->getMaxSeqLen());
+    unsigned int tDbrMax = 0;
+    for (size_t i = 0; i < tDbrs.size(); i++) {
+        if (tDbrs[i]->getMaxSeqLen() > tDbrMax) {
+            tDbrMax = tDbrs[i]->getMaxSeqLen();
+        }
+    }
+    const unsigned int maxSequenceLength = std::max(tDbrMax, qDbr->getMaxSeqLen());
 
     // qDbr->readMmapedDataInMemory();
     // make sure to touch target after query, so if there is not enough memory for the query, at least the targets
     // might have had enough space left to be residung in the page cache
     if (sameDatabase == false && templateDBIsIndex == false && par.preloadMode != Parameters::PRELOAD_MODE_MMAP) {
-        tDbr->readMmapedDataInMemory();
+        // tDbr->readMmapedDataInMemory();
+        for (size_t i = 0; i < tDbrs.size(); i++) {
+            tDbrs[i]->readMmapedDataInMemory();
+        }
     }
 
     int type = Parameters::DBTYPE_HMM_PROFILE;
@@ -120,11 +179,19 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
     resultWriter.open();
 
     // + 1 for query
-    size_t maxSetSize = resultReader.maxCount('\n') + 1;
+    size_t maxSetSize = 0;
+    for (size_t i = 0; i < tDbrs.size(); i++) {
+        maxSetSize += resultDbrs[i]->maxCount('\n') + 1;
+    }
+    // size_t maxSetSize = resultReader.maxCount('\n') + 1;
 
     // adjust score of each match state by -0.2 to trim alignment
     SubstitutionMatrix subMat(par.scoringMatrixFile.values.aminoacid().c_str(), 2.0f, -0.2f);
-    EvalueComputation evalueComputation(par.dbSize == 0 ? tDbr->getAminoAcidDBSize() : par.dbSize, &subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid());
+    size_t autoDbSize = 0;
+    for (size_t i = 0; i < tDbrs.size(); i++) {
+        autoDbSize += tDbrs[i]->getAminoAcidDBSize();
+    }
+    EvalueComputation evalueComputation(par.dbSize == 0 ? autoDbSize : par.dbSize, &subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid());
 
     if (qDbr->getDbtype() == -1 || targetSeqType == -1) {
         Debug(Debug::ERROR) << "Please recreate your database or add a .dbtype file to your sequence/profile database\n";
@@ -136,7 +203,12 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
     }
 
     Debug(Debug::INFO) << "Query database size: " << qDbr->getSize() << " type: " << qDbr->getDbTypeName() << "\n";
-    Debug(Debug::INFO) << "Target database size: " << tDbr->getSize() << " type: " << Parameters::getDbTypeName(targetSeqType) << "\n";
+    size_t dbSizeSum = 0;
+    for (size_t i = 0; i < tDbrs.size(); i++) {
+        Debug(Debug::INFO) << "Target database " << i << " size: " << tDbrs[i]->getSize() << " type: " << tDbrs[i]->getDbTypeName() << "\n";
+        dbSizeSum += tDbrs[i]->getSize();
+    }
+    Debug(Debug::INFO) << "Total target database size: " << dbSizeSum << " type: " << Parameters::getDbTypeName(targetSeqType) << "\n";
 
     const bool isFiltering = par.filterMsa != 0 || returnAlnRes;
     Debug::Progress progress(dbSize - dbFrom);
@@ -174,6 +246,9 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
         std::vector<std::vector<unsigned char>> seqSet;
         seqSet.reserve(300);
 
+        DBReader<unsigned int> *localResultReader = NULL;
+        DBReader<unsigned int> *localTDbr = NULL;
+
         std::string result;
         result.reserve((maxSequenceLength + 1) * Sequence::PROFILE_READIN_SIZE);
 
@@ -181,7 +256,7 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
         for (size_t id = dbFrom; id < (dbFrom + dbSize); id++) {
             progress.updateProgress();
 
-            unsigned int queryKey = resultReader.getDbKey(id);
+            unsigned int queryKey = resultDbrs[0]->getDbKey(id);
             size_t queryId = qDbr->getId(queryKey);
             if (queryId == UINT_MAX) {
                 Debug(Debug::WARNING) << "Invalid query sequence " << queryKey << "\n";
@@ -189,55 +264,60 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
             }
             centerSequence.mapSequence(queryId, queryKey, qDbr->getData(queryId, thread_idx), qDbr->getSeqLen(queryId));
 
-            bool isQueryInit = false;
-            char *data = resultReader.getData(id, thread_idx);
-            while (*data != '\0') {
-                Util::parseKey(data, dbKey);
-                const unsigned int key = (unsigned int) strtoul(dbKey, NULL, 10);
-                // in the same database case, we have the query repeated
-                if (key == queryKey && sameDatabase == true) {
-                    if(returnAlnRes && par.includeIdentity){
-                        Matcher::result_t res = Matcher::parseAlignmentRecord(data);
-                        size_t len = Matcher::resultToBuffer(buffer, res, true);
-                        result.append(buffer, len);
-                    }
-
-                    data = Util::skipLine(data);
-                    continue;
-                }
-
-                const size_t columns = Util::getWordsOfLine(data, entry, 255);
-                float evalue = 0.0;
-                if (returnAlnRes == false && columns >= 4) {
-                    evalue = strtod(entry[3], NULL);
-                }
-
-                if (returnAlnRes == true || evalue < par.evalProfile) {
-                    const size_t edgeId = tDbr->getId(key);
-                    if (edgeId == UINT_MAX) {
-                        Debug(Debug::ERROR) << "Sequence " << key << " does not exist in target sequence database\n";
-                        EXIT(EXIT_FAILURE);
-                    }
-                    
-                    if (columns > Matcher::ALN_RES_WITHOUT_BT_COL_CNT) {
-                        alnResults.emplace_back(Matcher::parseAlignmentRecord(data));
-                    } else {
-                        // Recompute if not all the backtraces are present
-                        if (isQueryInit == false) {
-                            matcher.initQuery(&centerSequence);
-                            isQueryInit = true;
+            // Iterate through the target and result DBs
+            for (size_t i = 0; i < tDbrs.size(); i++) {
+                localTDbr = tDbrs[i];
+                localResultReader = resultDbrs[i];
+                bool isQueryInit = false;
+                char *data = localResultReader->getData(resultDbIds[i][queryKey], thread_idx);
+                while (*data != '\0') {
+                    Util::parseKey(data, dbKey);
+                    const unsigned int key = (unsigned int) strtoul(dbKey, NULL, 10);
+                    // in the same database case, we have the query repeated
+                    if (key == queryKey && sameDatabase == true) {
+                        if(returnAlnRes && par.includeIdentity){
+                            Matcher::result_t res = Matcher::parseAlignmentRecord(data);
+                            size_t len = Matcher::resultToBuffer(buffer, res, true);
+                            result.append(buffer, len);
                         }
-                        alnResults.emplace_back(matcher.getSWResult(&edgeSequence, INT_MAX, false, 0, 0.0, FLT_MAX, Matcher::SCORE_COV_SEQID, 0, false));
+
+                        data = Util::skipLine(data);
+                        continue;
                     }
-                    // Check if it is on the reverse strand or not
-                    bool reverse = false;
-                    if (alnResults.back().qStartPos > alnResults.back().qEndPos) {
-                        reverse = true;
+
+                    const size_t columns = Util::getWordsOfLine(data, entry, 255);
+                    float evalue = 0.0;
+                    if (returnAlnRes == false && columns >= 4) {
+                        evalue = strtod(entry[3], NULL);
                     }
-                    edgeSequence.mapSequence(edgeId, key, tDbr->getData(edgeId, thread_idx), tDbr->getSeqLen(edgeId), false, NULL, reverse, false, 1.0f, tDbr->isPadded());
-                    seqSet.emplace_back(std::vector<unsigned char>(edgeSequence.numSequence, edgeSequence.numSequence + edgeSequence.L));
+
+                    if (returnAlnRes == true || evalue < par.evalProfile) {
+                        const size_t edgeId = localTDbr->getId(key);
+                        if (edgeId == UINT_MAX) {
+                            Debug(Debug::ERROR) << "Sequence " << key << " does not exist in target sequence database\n";
+                            EXIT(EXIT_FAILURE);
+                        }
+                        
+                        if (columns > Matcher::ALN_RES_WITHOUT_BT_COL_CNT) {
+                            alnResults.emplace_back(Matcher::parseAlignmentRecord(data));
+                        } else {
+                            // Recompute if not all the backtraces are present
+                            if (isQueryInit == false) {
+                                matcher.initQuery(&centerSequence);
+                                isQueryInit = true;
+                            }
+                            alnResults.emplace_back(matcher.getSWResult(&edgeSequence, INT_MAX, false, 0, 0.0, FLT_MAX, Matcher::SCORE_COV_SEQID, 0, false));
+                        }
+                        // Check if it is on the reverse strand or not
+                        bool reverse = false;
+                        if (alnResults.back().qStartPos > alnResults.back().qEndPos) {
+                            reverse = true;
+                        }
+                        edgeSequence.mapSequence(edgeId, key, localTDbr->getData(edgeId, thread_idx), localTDbr->getSeqLen(edgeId), false, NULL, reverse, false, 1.0f, localTDbr->isPadded());
+                        seqSet.emplace_back(std::vector<unsigned char>(edgeSequence.numSequence, edgeSequence.numSequence + edgeSequence.L));
+                    }
+                    data = Util::skipLine(data);
                 }
-                data = Util::skipLine(data);
             }
 
             // Recompute if not all the backtraces are present
@@ -300,15 +380,23 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
     if (writePlain) {
         FileUtil::remove(par.db4Index.c_str());
     }
-    resultReader.close();
+    // resultReader.close();
+    for (size_t i = 0; i < resultDbrs.size(); i++) {
+        resultDbrs[i]->close();
+        delete resultDbrs[i];
+    }
 
     if (!sameDatabase) {
         qDbr->close();
         delete qDbr;
     }
     if (tDbrIdx == NULL) {
-        tDbr->close();
-        delete tDbr;
+        for (size_t i = 0; i < tDbrs.size(); i++) {
+            tDbrs[i]->close();
+            delete tDbrs[i];
+        }
+        // tDbr->close();
+        // delete tDbr;
     } else {
         delete tDbrIdx;
     }
