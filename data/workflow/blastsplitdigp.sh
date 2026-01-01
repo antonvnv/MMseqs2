@@ -65,7 +65,6 @@ ORIQUERYDB="$1"
 # TARGETDB="$2"
 TMP_PATH="${chk}" # tmp directory
 OFFSET_INPUT=""
-SUBTRACT_INPUT=""
 
 # if [ -n "$NEEDTARGETSPLIT" ]; then
 #     if notExists "$TMP_PATH/target_seqs_split.dbtype"; then
@@ -143,7 +142,7 @@ while [ "$STEP" -lt "$NUM_IT" ]; do
             if notExists "$TMP_PATH/pref_${STEP}_${i}.done"; then
                 STEPONE=$((STEP-1))
                 # shellcheck disable=SC2086
-                "$MMSEQS" subtractdbs "$TMP_PATH/pref_tmp_${STEP}_${i}" "$SUBTRACT_INPUT" "$TMP_PATH/pref_${STEP}_${i}" $SUBSTRACT_PAR \
+                "$MMSEQS" subtractdbs "$TMP_PATH/pref_tmp_${STEP}_${i}" "$TMP_PATH/aln_double_${STEPONE}_${i}" "$TMP_PATH/pref_${STEP}_${i}" $SUBSTRACT_PAR \
                     || fail "Substract died"
                 # # shellcheck disable=SC2086
                 # "$MMSEQS" subtractdbs "$TMP_PATH/pref_tmp_${STEP}_${i}" "$TMP_PATH/aln_${STEP}_${i}ONE" "$TMP_PATH/pref_${STEP}_${i}" $SUBSTRACT_PAR \
@@ -160,14 +159,13 @@ while [ "$STEP" -lt "$NUM_IT" ]; do
 
             if [ "$STEP" -eq 0 ]; then
                 OFFSET_INPUT="$TMP_PATH/aln_double_${STEP}_${i}"
-                SUBTRACT_INPUT="$TMP_PATH/aln_double_${STEP}_${i}"
                 # shellcheck disable=SC2086
-                $RUNNER "$MMSEQS" "${ALIGN_MODULE}" "$QUERYDB" "$TARGETDB" "$TMP_PATH/pref_${STEP}_${i}" "$OFFSET_INPUT" ${TMP} \
+                $RUNNER "$MMSEQS" "${ALIGN_MODULE}" "$QUERYDB" "$TARGETDB" "$TMP_PATH/pref_${STEP}_${i}" "$TMP_PATH/aln_double_${STEP}_${i}" ${TMP} \
                     || fail "Alignment died"
             else
                 OFFSET_INPUT="$TMP_PATH/aln_tmp_double_${STEP}_${i}"
                 # shellcheck disable=SC2086
-                $RUNNER "$MMSEQS" "${ALIGN_MODULE}" "$QUERYDB" "$TARGETDB" "$TMP_PATH/pref_${STEP}_${i}" "$OFFSET_INPUT" ${TMP} \
+                $RUNNER "$MMSEQS" "${ALIGN_MODULE}" "$QUERYDB" "$TARGETDB" "$TMP_PATH/pref_${STEP}_${i}" "$TMP_PATH/aln_tmp_double_${STEP}_${i}" ${TMP} \
                     || fail "Alignment died"
             fi
             touch "$TMP_PATH/aln_tmp_${STEP}_${i}.done"
@@ -175,15 +173,15 @@ while [ "$STEP" -lt "$NUM_IT" ]; do
 
         # merge alignments for the next round
         if [ "$STEP" -gt 0 ]; then
+            STEPONE=$((STEP-1))
             if notExists "$TMP_PATH/merge_aln_double_${STEP}_${i}.done"; then
                 if [ "$STEP" -ne "$((NUM_IT  - 1))" ]; then
                     # merge alignments before offset
-                    "$MMSEQS" mergedbs "$QUERYDB" "$TMP_PATH/aln_merge_${STEP}_${i}" "$SUBTRACT_INPUT" "$OFFSET_INPUT" \
+                    "$MMSEQS" mergedbs "$QUERYDB" "$TMP_PATH/aln_double_${STEP}_${i}" "$TMP_PATH/aln_double_${STEPONE}_${i}" "$OFFSET_INPUT" \
                         || fail "Alignment died"
-                    "$MMSEQS" rmdb "$SUBTRACT_INPUT"
-                    SUBTRACT_INPUT="$TMP_PATH/aln_merge_${STEP}_${i}"
+                    "$MMSEQS" rmdb "$TMP_PATH/aln_double_${STEPONE}_${i}"
                 else
-                    "$MMSEQS" rmdb "$SUBTRACT_INPUT"
+                    "$MMSEQS" rmdb "$TMP_PATH/aln_double_${STEPONE}_${i}"
                 fi
                 touch "$TMP_PATH/merge_aln_double_${STEP}_${i}.done"
             fi
