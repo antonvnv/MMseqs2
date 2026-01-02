@@ -702,6 +702,28 @@ Parameters::Parameters():
     result2msa.push_back(&PARAM_COMPRESSED);
     result2msa.push_back(&PARAM_V);
 
+    // results2msa
+    results2msa.push_back(&PARAM_SUB_MAT);
+    results2msa.push_back(&PARAM_GAP_OPEN);
+    results2msa.push_back(&PARAM_GAP_EXTEND);
+    results2msa.push_back(&PARAM_ALLOW_DELETION);
+    results2msa.push_back(&PARAM_NO_COMP_BIAS_CORR);
+    results2msa.push_back(&PARAM_NO_COMP_BIAS_CORR_SCALE);
+    results2msa.push_back(&PARAM_MSA_FORMAT_MODE);
+    results2msa.push_back(&PARAM_SUMMARY_PREFIX);
+    results2msa.push_back(&PARAM_SKIP_QUERY);
+    results2msa.push_back(&PARAM_FILTER_MSA);
+    results2msa.push_back(&PARAM_FILTER_MIN_ENABLE);
+    results2msa.push_back(&PARAM_FILTER_MAX_SEQ_ID);
+    results2msa.push_back(&PARAM_FILTER_QID);
+    results2msa.push_back(&PARAM_FILTER_QSC);
+    results2msa.push_back(&PARAM_FILTER_COV);
+    results2msa.push_back(&PARAM_FILTER_NDIFF);
+    results2msa.push_back(&PARAM_PRELOAD_MODE);
+    results2msa.push_back(&PARAM_THREADS);
+    results2msa.push_back(&PARAM_COMPRESSED);
+    results2msa.push_back(&PARAM_V);
+
     // result2dnamsa
     result2dnamsa.push_back(&PARAM_SKIP_QUERY);
     result2dnamsa.push_back(&PARAM_THREADS);

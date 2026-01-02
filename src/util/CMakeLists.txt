@@ -53,6 +53,7 @@ set(util_source_files
         util/result2dnamsa.cpp
         util/result2flat.cpp
         util/result2msa.cpp
+        util/results2msa.cpp
         util/result2rbh.cpp
         util/result2profile.cpp
         util/results2profile.cpp
