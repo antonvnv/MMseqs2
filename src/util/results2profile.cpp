@@ -111,7 +111,7 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
     int targetSeqType = -1;
     int targetDbtype = FileUtil::parseDbType(par.db2.c_str());
     if (Parameters::isEqualDbtype(targetDbtype, Parameters::DBTYPE_INDEX_DB)) {
-        uint16_t extended = DBReader<unsigned int>::getExtendedDbtype(FileUtil::parseDbType(par.db3.c_str()));
+        uint16_t extended = DBReader<unsigned int>::getExtendedDbtype(FileUtil::parseDbType(par.filenames[par.filenames.size() - 2].c_str()));
         needSrcIndex = extended & Parameters::DBTYPE_EXTENDED_INDEX_NEED_SRC;
         bool touch = (par.preloadMode != Parameters::PRELOAD_MODE_MMAP);
         tDbrIdx = new IndexReader(par.db2, par.threads,
@@ -407,16 +407,16 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
     if (MMseqsMPI::isMaster()) {
         std::vector<std::pair<std::string, std::string>> splitFiles;
         for (int procs = 0; procs < MMseqsMPI::numProc; procs++) {
-            std::pair<std::string, std::string> tmpFile = Util::createTmpFileNames(par.db4, par.db4Index, procs);
+            std::pair<std::string, std::string> tmpFile = Util::createTmpFileNames(par.filenames[par.filenames.size() - 1], par.filenames[par.filenames.size() - 1] + ".index", procs);
             splitFiles.push_back(std::make_pair(tmpFile.first, tmpFile.second));
 
         }
-        DBWriter::mergeResults(par.db4, par.db4Index, splitFiles);
+        DBWriter::mergeResults(par.filenames[par.filenames.size() - 1], par.filenames[par.filenames.size() - 1] + ".index", splitFiles);
     }
 #endif
 
     if (MMseqsMPI::isMaster() && returnAlnRes == false) {
-        DBReader<unsigned int>::softlinkDb(par.db1, par.db4, DBFiles::SEQUENCE_ANCILLARY);
+        DBReader<unsigned int>::softlinkDb(par.db1, par.filenames[par.filenames.size() - 1], DBFiles::SEQUENCE_ANCILLARY);
     }
 
     return EXIT_SUCCESS;
