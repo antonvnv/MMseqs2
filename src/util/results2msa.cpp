@@ -32,29 +32,56 @@ int results2msa(int argc, const char **argv, const Command &command) {
     const bool isCA3M = par.msaFormatMode == Parameters::FORMAT_MSA_CA3M || par.msaFormatMode == Parameters::FORMAT_MSA_CA3M_CONSENSUS;
     const bool shouldWriteNullByte = par.msaFormatMode != Parameters::FORMAT_MSA_STOCKHOLM_FLAT;
 
+    // vector of targetdbs and resultdbs
+    std::vector<std::string> targetDbPaths, resultDbPaths;
+    // Make sure that the length of par.filenames is even
+    if (par.filenames.size() != 4) {
+        Debug(Debug::ERROR) << "Please provide query, target, result and output database paths\n";
+        return EXIT_FAILURE;
+    }
+    size_t i = 1;
+    for (; i < par.filenames.size() / 2; i++) {
+        targetDbPaths.push_back(par.filenames[i]);
+    }
+    for (; i < par.filenames.size() - 1; i++) {
+        resultDbPaths.push_back(par.filenames[i]);
+    }
+
+    std::vector<DBReader<unsigned int>*> tDbrs;
+    std::vector<DBReader<unsigned int>*> targetHeaderReaders;
+
     DBReader<unsigned int> *tDbr = NULL;
     IndexReader *tDbrIdx = NULL;
     DBReader<unsigned int> *targetHeaderReader = NULL;
     IndexReader *targetHeaderReaderIdx = NULL;
     const bool sameDatabase = (par.db1.compare(par.db2) == 0) ? true : false;
 
-    // vector of targetdbs and resultdbs
-    std::vector<std::string> targetDbPaths, resultDbPaths;
-
     if (isCA3M == true) {
         Debug(Debug::ERROR) << "Cannot use results2msa with indexed target database for CA3M output\n";
         return EXIT_FAILURE;
     }
-    uint16_t extended = DBReader<unsigned int>::getExtendedDbtype(FileUtil::parseDbType(par.db3.c_str()));
+    uint16_t extended = DBReader<unsigned int>::getExtendedDbtype(FileUtil::parseDbType(par.filenames[par.filenames.size() - 2].c_str()));
     bool touch = (par.preloadMode != Parameters::PRELOAD_MODE_MMAP);
-    tDbrIdx = new IndexReader(par.db2, par.threads,
-                              extended & Parameters::DBTYPE_EXTENDED_INDEX_NEED_SRC ? IndexReader::SRC_SEQUENCES : IndexReader::SEQUENCES,
-                              (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0);
-    tDbr = tDbrIdx->sequenceReader;
-    targetHeaderReaderIdx = new IndexReader(par.db2, par.threads,
-                                            extended & Parameters::DBTYPE_EXTENDED_INDEX_NEED_SRC ? IndexReader::SRC_HEADERS : IndexReader::HEADERS,
-                                            (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0);
-    targetHeaderReader = targetHeaderReaderIdx->sequenceReader;
+    for (size_t i = 0; i < targetDbPaths.size(); i++) {
+        tDbrIdx = new IndexReader(targetDbPaths[i], par.threads,
+                                  extended & Parameters::DBTYPE_EXTENDED_INDEX_NEED_SRC ? IndexReader::SRC_SEQUENCES : IndexReader::SEQUENCES,
+                                  (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0);
+        tDbr = tDbrIdx->sequenceReader;
+        tDbrs.push_back(tDbr);
+        targetHeaderReaderIdx = new IndexReader(par.hdr2, par.threads,
+                                                extended & Parameters::DBTYPE_EXTENDED_INDEX_NEED_SRC ? IndexReader::SRC_HEADERS : IndexReader::HEADERS,
+                                                (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0);
+        targetHeaderReader = targetHeaderReaderIdx->sequenceReader;
+        targetHeaderReaders.push_back(targetHeaderReader);
+    }
+    // tDbrIdx = new IndexReader(par.db2, par.threads,
+    //                           extended & Parameters::DBTYPE_EXTENDED_INDEX_NEED_SRC ? IndexReader::SRC_SEQUENCES : IndexReader::SEQUENCES,
+    //                           (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0);
+    // tDbr = tDbrIdx->sequenceReader;
+    // targetHeaderReaderIdx = new IndexReader(par.db2, par.threads,
+    //                                         extended & Parameters::DBTYPE_EXTENDED_INDEX_NEED_SRC ? IndexReader::SRC_HEADERS : IndexReader::HEADERS,
+    //                                         (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0);
+    // targetHeaderReader = targetHeaderReaderIdx->sequenceReader;
 
     DBReader<unsigned int> *qDbr = NULL;
     DBReader<unsigned int> *queryHeaderReader = NULL;
@@ -73,12 +100,19 @@ int results2msa(int argc, const char **argv, const Command &command) {
         qDbr = tDbr;
         queryHeaderReader = targetHeaderReader;
     }
-    const unsigned int maxSequenceLength = std::max(tDbr->getMaxSeqLen(), qDbr->getMaxSeqLen());
+    unsigned int tDbrMax = 0;
+    for (size_t i = 0; i < tDbrs.size(); i++) {
+        if (tDbrs[i]->getMaxSeqLen() > tDbrMax) {
+            tDbrMax = tDbrs[i]->getMaxSeqLen();
+        }
+    }
+    const unsigned int maxSequenceLength = std::max(tDbrMax, qDbr->getMaxSeqLen());
 
     DBConcat *seqConcat = NULL;
     DBReader<unsigned int> *refReader = NULL;
-    std::string outDb = par.db4;
-    std::string outIndex = par.db4Index;
+    std::string outDb = par.filenames[par.filenames.size() - 1];
+    std::string outIndex = par.filenames[par.filenames.size() - 1] + ".index";
+    // TODO: currently cA3M is not supported for nucleotide. Add support if needed.
     if (isCA3M == true) {
         std::string refData = outDb + "_sequence.ffdata";
         std::string refIndex = outDb + "_sequence.ffindex";
@@ -98,23 +132,50 @@ int results2msa(int argc, const char **argv, const Command &command) {
         outIndex = par.db4 + "_ca3m.ffindex";
     }
 
-    DBReader<unsigned int> resultReader(par.db3.c_str(), par.db3Index.c_str(), par.threads, DBReader<unsigned int>::USE_DATA | DBReader<unsigned int>::USE_INDEX);
-    resultReader.open(DBReader<unsigned int>::LINEAR_ACCCESS);
+    // DBReader<unsigned int> resultReader(par.db3.c_str(), par.db3Index.c_str(), par.threads, DBReader<unsigned int>::USE_DATA | DBReader<unsigned int>::USE_INDEX);
+    // resultReader.open(DBReader<unsigned int>::LINEAR_ACCCESS);
+    std::vector<DBReader<unsigned int>*> resultReaders;
+    for (size_t i = 0; i < resultDbPaths.size(); i++) {
+        DBReader<unsigned int> *resultReader = new DBReader<unsigned int>(resultDbPaths[i].c_str(), (resultDbPaths[i] + ".index").c_str(), par.threads, DBReader<unsigned int>::USE_DATA | DBReader<unsigned int>::USE_INDEX);
+        resultReader->open(DBReader<unsigned int>::LINEAR_ACCCESS);
+        resultReaders.push_back(resultReader);
+    }
     size_t dbFrom = 0;
     size_t dbSize = 0;
 #ifdef HAVE_MPI
-    resultReader.decomposeDomainByAminoAcid(MMseqsMPI::rank, MMseqsMPI::numProc, &dbFrom, &dbSize);
+    resultReaders[0].decomposeDomainByAminoAcid(MMseqsMPI::rank, MMseqsMPI::numProc, &dbFrom, &dbSize);
     Debug(Debug::INFO) << "Compute split from " << dbFrom << " to " << dbFrom + dbSize << "\n";
     std::pair<std::string, std::string> tmpOutput = Util::createTmpFileNames(outDb, outIndex, MMseqsMPI::rank);
 #else
-    dbSize = resultReader.getSize();
+    dbSize = resultReaders[0]->getSize(); // getSize should be same for all result DBs
     std::pair<std::string, std::string> tmpOutput = std::make_pair(outDb, outIndex);
 #endif
 
     size_t localThreads = 1;
 #ifdef OPENMP
-    localThreads = std::max(std::min((size_t)par.threads, resultReader.getSize()), (size_t)1);
+    localThreads = std::max(std::min((size_t)par.threads, dbSize), (size_t)1);
 #endif
+
+    std::vector<std::vector<unsigned int>> resultDbIds;
+    resultDbIds.reserve(resultDbPaths.size());
+
+    // reserve dbSize in each of the resultDbIds
+    for (size_t i = 0; i < resultReaders.size(); i++) {
+        resultDbIds.push_back(std::vector<unsigned int>());
+        resultDbIds[i].reserve(dbSize);
+        for (size_t j = 0; j < dbSize; j++) {
+            resultDbIds[i].push_back(UINT_MAX);
+        }
+    }
+
+    // save the resultDb ids to the queryKeys
+    for (size_t i = 0; i < resultReaders.size(); i++) {
+        DBReader<unsigned int> *currentDbr = resultReaders[i];
+        for (size_t id = dbFrom; id < (dbFrom + dbSize); id++) {
+            unsigned int queryKey = currentDbr->getDbKey(id);
+            resultDbIds[i][queryKey] = id;
+        }
+    }
 
     size_t mode = par.compressed;
     int type = Parameters::DBTYPE_MSA_DB;
@@ -128,7 +189,10 @@ int results2msa(int argc, const char **argv, const Command &command) {
     resultWriter.open();
 
     // + 1 for query
-    size_t maxSetSize = resultReader.maxCount('\n') + 1;
+    size_t maxSetSize = 0;
+    for (size_t i = 0; i < tDbrs.size(); i++) {
+        maxSetSize += resultReaders[i]->maxCount('\n') + 1;
+    }
 
     // adjust score of each match state by -0.2 to trim alignment
     SubstitutionMatrix subMat(par.scoringMatrixFile.values.aminoacid().c_str(), 2.0f, -0.2f);
@@ -142,7 +206,12 @@ int results2msa(int argc, const char **argv, const Command &command) {
         return EXIT_FAILURE;
     }
     Debug(Debug::INFO) << "Query database size: " << qDbr->getSize() << " type: " << qDbr->getDbTypeName() << "\n";
-    Debug(Debug::INFO) << "Target database size: " << tDbr->getSize() << " type: " << tDbr->getDbTypeName() << "\n";
+    size_t dbSizeSum = 0;
+    for (size_t i = 0; i < tDbrs.size(); i++) {
+        Debug(Debug::INFO) << "Target database " << i << " size: " << tDbrs[i]->getSize() << " type: " << tDbrs[i]->getDbTypeName() << "\n";
+        dbSizeSum += tDbrs[i]->getSize();
+    }
+    Debug(Debug::INFO) << "Total target database size: " << dbSizeSum << " type: " << tDbrs[0]->getDbTypeName() << "\n";
 
     const bool isFiltering = par.filterMsa != 0;
     Debug::Progress progress(dbSize - dbFrom);
@@ -187,17 +256,21 @@ int results2msa(int argc, const char **argv, const Command &command) {
         std::vector<std::vector<unsigned char>> seqSet;
         seqSet.reserve(300);
 
-        std::vector<unsigned int> seqKeys;
-        seqKeys.reserve(300);
+        std::vector<std::pair<unsigned int, unsigned int>> seqKeys;
+        seqKeys.reserve(300 * tDbrs.size());
 
         std::string result;
         result.reserve(300 * 1024);
         char buffer[1024 + 32768*4];
 
+        DBReader<unsigned int> *localResultReader = NULL;
+        DBReader<unsigned int> *localTDbr = NULL;
+        DBReader<unsigned int> *localTargetHeaderReader = NULL;
+
 #pragma omp for schedule(dynamic, 10)
         for (size_t id = dbFrom; id < (dbFrom + dbSize); id++) {
             progress.updateProgress();
-            unsigned int queryKey = resultReader.getDbKey(id);
+            unsigned int queryKey = resultReaders[0]->getDbKey(id);
             size_t queryId = qDbr->getId(queryKey);
             if (queryId == UINT_MAX) {
                 Debug(Debug::WARNING) << "Invalid query sequence " << queryKey << "\n";
@@ -225,44 +298,50 @@ int results2msa(int argc, const char **argv, const Command &command) {
                 accession = Util::parseFastaHeader(centerSequenceHeader);
             }
 
-            bool isQueryInit = false;
-            char *data = resultReader.getData(id, thread_idx);
-            while (*data != '\0') {
-                Util::parseKey(data, dbKey);
+            // Iterate through the target and result DBs
+            for (size_t i = 0; i < tDbrs.size(); i++) {
+                localTDbr = tDbrs[i];
+                localResultReader = resultReaders[i];
+                bool isQueryInit = false;
+                char *data = localResultReader->getData(resultDbIds[i][queryKey], thread_idx);
+                while (*data != '\0') {
+                    Util::parseKey(data, dbKey);
 
-                const unsigned int key = (unsigned int) strtoul(dbKey, NULL, 10);
-                // in the same database case, we have the query repeated
-                if (key == queryKey && sameDatabase == true) {
-                    data = Util::skipLine(data);
-                    continue;
-                }
-
-                const size_t edgeId = tDbr->getId(key);
-                if (edgeId == UINT_MAX) {
-                    Debug(Debug::ERROR) << "Sequence " << key << " does not exist in target sequence database\n";
-                    EXIT(EXIT_FAILURE);
-                }
-                
-                const size_t columns = Util::getWordsOfLine(data, entry, 255);
-                if (columns > Matcher::ALN_RES_WITHOUT_BT_COL_CNT) {
-                    alnResults.emplace_back(Matcher::parseAlignmentRecord(data));
-                } else {
-                    // Recompute if not all the backtraces are present
-                    if (isQueryInit == false) {
-                        matcher.initQuery(&centerSequence);
-                        isQueryInit = true;
+                    const unsigned int key = (unsigned int) strtoul(dbKey, NULL, 10);
+                    // in the same database case, we have the query repeated
+                    if (key == queryKey && sameDatabase == true) {
+                        data = Util::skipLine(data);
+                        continue;
                     }
-                    alnResults.emplace_back(matcher.getSWResult(&edgeSequence, INT_MAX, false, 0, 0.0, FLT_MAX, Matcher::SCORE_COV_SEQID, 0, false));
+
+                    const size_t edgeId = localTDbr->getId(key);
+                    if (edgeId == UINT_MAX) {
+                        Debug(Debug::ERROR) << "Sequence " << key << " does not exist in target sequence database\n";
+                        EXIT(EXIT_FAILURE);
+                    }
+                    
+                    const size_t columns = Util::getWordsOfLine(data, entry, 255);
+                    if (columns > Matcher::ALN_RES_WITHOUT_BT_COL_CNT) {
+                        alnResults.emplace_back(Matcher::parseAlignmentRecord(data));
+                    } else {
+                        // Recompute if not all the backtraces are present
+                        if (isQueryInit == false) {
+                            matcher.initQuery(&centerSequence);
+                            isQueryInit = true;
+                        }
+                        alnResults.emplace_back(matcher.getSWResult(&edgeSequence, INT_MAX, false, 0, 0.0, FLT_MAX, Matcher::SCORE_COV_SEQID, 0, false));
+                    }
+                    // Check if it is on the reverse strand or not
+                    bool reverse = false;
+                    if (alnResults.back().qStartPos > alnResults.back().qEndPos) {
+                        reverse = true;
+                    }
+                    edgeSequence.mapSequence(edgeId, key, localTDbr->getData(edgeId, thread_idx), localTDbr->getSeqLen(edgeId), false, NULL, reverse, false, 1.0f, localTDbr->isPadded());
+                    seqSet.emplace_back(std::vector<unsigned char>(edgeSequence.numSequence, edgeSequence.numSequence + edgeSequence.L));
+                    // seqKeys.emplace_back(key);
+                    seqKeys.emplace_back(std::make_pair(i, key));
+                    data = Util::skipLine(data);
                 }
-                // Check if it is on the reverse strand or not
-                bool reverse = false;
-                if (alnResults.back().qStartPos > alnResults.back().qEndPos) {
-                    reverse = true;
-                }
-                edgeSequence.mapSequence(edgeId, key, tDbr->getData(edgeId, thread_idx), tDbr->getSeqLen(edgeId), false, NULL, reverse, false, 1.0f, tDbr->isPadded());
-                seqSet.emplace_back(std::vector<unsigned char>(edgeSequence.numSequence, edgeSequence.numSequence + edgeSequence.L));
-                seqKeys.emplace_back(key);
-                data = Util::skipLine(data);
             }
 
             MultipleAlignment::MSAResult res = aligner.computeMSA(&centerSequence, seqSet, alnResults, !par.allowDeletion, true);
@@ -279,10 +358,13 @@ int results2msa(int argc, const char **argv, const Command &command) {
                         if (i == 0) {
                             headers.emplace_back(centerSequenceHeader, centerHeaderLength);
                         } else if (kept[i] == true) {
-                            unsigned int key = seqKeys[i - 1];
-                            size_t id = targetHeaderReader->getId(key);
-                            char *header = targetHeaderReader->getData(id, thread_idx);
-                            size_t length = targetHeaderReader->getEntryLen(id) - 1;
+                            std::pair<unsigned int, unsigned int> p = seqKeys[i - 1];
+                            unsigned int i = p.first;
+                            unsigned int key = p.second;
+                            localTargetHeaderReader = targetHeaderReaders[i];
+                            size_t id = localTargetHeaderReader->getId(key);
+                            char *header = localTargetHeaderReader->getData(id, thread_idx);
+                            size_t length = localTargetHeaderReader->getEntryLen(id) - 1;
                             headers.emplace_back(header, length);
                         }
                     }
@@ -311,10 +393,13 @@ int results2msa(int argc, const char **argv, const Command &command) {
                         header = centerSequenceHeader;
                         length = centerHeaderLength;
                     } else {
-                        unsigned int key = seqKeys[i - 1];
-                        size_t id = targetHeaderReader->getId(key);
-                        header = targetHeaderReader->getData(id, thread_idx);
-                        length = targetHeaderReader->getEntryLen(id) - 1;
+                        std::pair<unsigned int, unsigned int> p = seqKeys[i - 1];
+                        unsigned int i = p.first;
+                        unsigned int key = p.second;
+                        localTargetHeaderReader = targetHeaderReaders[i];
+                        size_t id = localTargetHeaderReader->getId(key);
+                        header = localTargetHeaderReader->getData(id, thread_idx);
+                        length = localTargetHeaderReader->getEntryLen(id) - 1;
                     }
                     bool isOnlyGap = true;
                     for (size_t pos = 0; pos < res.centerLength; pos++) {
@@ -378,9 +463,12 @@ int results2msa(int argc, const char **argv, const Command &command) {
                         if(isOnlyGap) {
                             header = "DUMMY";
                         }else {
-                            unsigned int key = seqKeys[i - 1];
-                            size_t id = targetHeaderReader->getId(key);
-                            header = targetHeaderReader->getData(id, thread_idx);
+                            std::pair<unsigned int, unsigned int> p = seqKeys[i - 1];
+                            unsigned int i = p.first;
+                            unsigned int key = p.second;
+                            localTargetHeaderReader = targetHeaderReaders[i];
+                            size_t id = localTargetHeaderReader->getId(key);
+                            header = localTargetHeaderReader->getData(id, thread_idx);
                         }
                     }
                     accession = Util::parseFastaHeader(header);
@@ -425,12 +513,15 @@ int results2msa(int argc, const char **argv, const Command &command) {
                             result.append(Util::parseFastaHeader(centerSequenceHeader));
                         }
                     } else {
-                        unsigned int key = seqKeys[i - 1];
-                        size_t id = targetHeaderReader->getId(key);
+                        std::pair<unsigned int, unsigned int> p = seqKeys[i - 1];
+                        unsigned int i = p.first;
+                        unsigned int key = p.second;
+                        localTargetHeaderReader = targetHeaderReaders[i];
+                        size_t id = localTargetHeaderReader->getId(key);
                         if(isOnlyGap){
                             result.append("DUMMY");
                         }else {
-                            result.append(Util::parseFastaHeader(targetHeaderReader->getData(id, thread_idx)));
+                            result.append(Util::parseFastaHeader(localTargetHeaderReader->getData(id, thread_idx)));
                         }
                         if (par.msaFormatMode == Parameters::FORMAT_MSA_A3M_ALN_INFO) {
                             size_t len = Matcher::resultToBuffer(buffer, alnResults[i - 1], false);
@@ -540,7 +631,11 @@ int results2msa(int argc, const char **argv, const Command &command) {
     if (shouldWriteNullByte == false) {
         FileUtil::remove(resultWriter.getIndexFileName());
     }
-    resultReader.close();
+    // resultReader.close();
+    for (size_t i = 0; i < resultReaders.size(); i++) {
+        resultReaders[i]->close();
+        delete resultReaders[i];
+    }
 
     if (!sameDatabase) {
         qDbr->close();
@@ -549,15 +644,29 @@ int results2msa(int argc, const char **argv, const Command &command) {
         delete queryHeaderReader;
     }
     if (tDbrIdx == NULL) {
-        tDbr->close();
-        delete tDbr;
+        // tDbr->close();
+        // delete tDbr;
+        for (size_t i = 0; i < tDbrs.size(); i++) {
+            tDbrs[i]->close();
+            delete tDbrs[i];
+        }
         if (targetHeaderReader != NULL) {
-            targetHeaderReader->close();
-            delete targetHeaderReader;
+            // targetHeaderReader->close();
+            // delete targetHeaderReader;
+            for (size_t i = 0; i < targetHeaderReaders.size(); i++) {
+                targetHeaderReaders[i]->close();
+                delete targetHeaderReaders[i];
+            }
         }
     } else {
-        delete tDbrIdx;
-        delete targetHeaderReaderIdx;
+        // delete tDbrIdx;
+        // delete targetHeaderReaderIdx;
+        for (size_t i = 0; i < tDbrs.size(); i++) {
+            delete tDbrs[i];
+        }
+        for (size_t i = 0; i < targetHeaderReaders.size(); i++) {
+            delete targetHeaderReaders[i];
+        }
     }
 
     if (refReader != NULL) {

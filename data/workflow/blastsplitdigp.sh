@@ -62,7 +62,7 @@ eval "chk=\${$i}"
 
 QUERYDB="$1"
 ORIQUERYDB="$1"
-# TARGETDB="$2"
+TARGETDB="$2"
 TMP_PATH="${chk}" # tmp directory
 OFFSET_INPUT=""
 
