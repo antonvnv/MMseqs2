@@ -35,8 +35,8 @@ int results2msa(int argc, const char **argv, const Command &command) {
     // vector of targetdbs and resultdbs
     std::vector<std::string> targetDbPaths, resultDbPaths;
     // Make sure that the length of par.filenames is even
-    if (par.filenames.size() != 4) {
-        Debug(Debug::ERROR) << "Please provide query, target, result and output database paths\n";
+    if (par.filenames.size() % 2 != 0) {
+        Debug(Debug::ERROR) << "Internal error: DB paths not provided appropriately, please check the input again\n";
         return EXIT_FAILURE;
     }
     size_t i = 1;
@@ -68,7 +68,7 @@ int results2msa(int argc, const char **argv, const Command &command) {
                                   (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0);
         tDbr = tDbrIdx->sequenceReader;
         tDbrs.push_back(tDbr);
-        targetHeaderReaderIdx = new IndexReader(par.hdr2, par.threads,
+        targetHeaderReaderIdx = new IndexReader(targetDbPaths[i], par.threads,
                                                 extended & Parameters::DBTYPE_EXTENDED_INDEX_NEED_SRC ? IndexReader::SRC_HEADERS : IndexReader::HEADERS,
                                                 (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0);
         targetHeaderReader = targetHeaderReaderIdx->sequenceReader;

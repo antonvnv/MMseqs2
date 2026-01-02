@@ -208,7 +208,7 @@ void MultipleAlignment::updateGapsInSequenceSet(char **msaSequence, size_t cente
 MultipleAlignment::MSAResult MultipleAlignment::computeMSA(Sequence *centerSeq, const std::vector<std::vector<unsigned char>>& edgeSeqs,
                                                            const std::vector<Matcher::result_t>& alignmentResults, bool noDeletionMSA, bool nucleic) {
     if (edgeSeqs.empty()) {
-        return singleSequenceMSA(centerSeq);
+        return singleSequenceMSA(centerSeq, nucleic);
     }
 
     if (edgeSeqs.size() != alignmentResults.size()) {
@@ -259,7 +259,7 @@ MultipleAlignment::MSAResult MultipleAlignment::computeMSA(Sequence *centerSeq, 
     return MSAResult(centerSeqSize, centerSeq->L, edgeSeqs.size() + 1, msaSequence);
 }
 
-MultipleAlignment::MSAResult MultipleAlignment::singleSequenceMSA(Sequence *centerSeq) {
+MultipleAlignment::MSAResult MultipleAlignment::singleSequenceMSA(Sequence *centerSeq, bool nucleic) {
     size_t queryMSASize = 0;
     char** msaSequence = initX(centerSeq->L, 1);
     for(int queryPos = 0; queryPos < centerSeq->L; queryPos++) {
@@ -267,7 +267,11 @@ MultipleAlignment::MSAResult MultipleAlignment::singleSequenceMSA(Sequence *cent
             Debug(Debug::ERROR) << "queryMSASize (" << queryMSASize << ") is >= maxMsaSeqLen (" << maxMsaSeqLen << ")" << "\n";
             EXIT(EXIT_FAILURE);
         }
-        msaSequence[0][queryMSASize] = (char) centerSeq->numSequence[queryPos];
+        if (nucleic) {
+            msaSequence[0][queryMSASize] = subMat->dinucToNuc[static_cast<int>(centerSeq->numSequence[queryPos])];
+        } else {
+            msaSequence[0][queryMSASize] = (char) centerSeq->numSequence[queryPos];
+        }
         queryMSASize++;
     }
     return MSAResult(queryMSASize, centerSeq->L, 1, msaSequence);

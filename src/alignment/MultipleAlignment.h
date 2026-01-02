@@ -56,7 +56,7 @@ private:
                                  const std::vector<Matcher::result_t> &alignmentResults, unsigned int *queryGaps,
                                  bool noDeletionMSA);
 
-    MSAResult singleSequenceMSA(Sequence *centerSeq);
+    MSAResult singleSequenceMSA(Sequence *centerSeq, bool nucleic = false);
 };
 
 #endif //MMSEQS_MULTIPLEALIGNMENT_H
