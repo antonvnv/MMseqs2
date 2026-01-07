@@ -85,7 +85,7 @@ int alignbykmer(int argc, const char **argv, const Command &command) {
     }
     ScoreMatrix _2merSubMatrix = ExtendedSubstitutionMatrix::calcScoreMatrix(*subMat, 2);
 
-    EvalueComputation evaluer(par.dbSize == 0? tdbr->getAminoAcidDBSize() : par.dbSize, subMat, gapOpen, gapExtend);
+    EvalueComputation evaluer(par.dbSize == 0? tdbr->getAminoAcidDBSize() : par.dbSize, subMat, gapOpen, gapExtend, par.strand == 2);
 
     DBWriter resultWriter(par.db4.c_str(), par.db4Index.c_str(), par.threads, par.compressed, Parameters::DBTYPE_ALIGNMENT_RES);
     resultWriter.open();

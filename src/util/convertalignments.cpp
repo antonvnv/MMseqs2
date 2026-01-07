@@ -249,7 +249,7 @@ int convertalignments(int argc, const char **argv, const Command &command) {
     if (needSequenceDB) {
         queryProfile = Parameters::isEqualDbtype(qDbr.sequenceReader->getDbtype(), Parameters::DBTYPE_HMM_PROFILE);
         targetProfile = Parameters::isEqualDbtype(tDbr->sequenceReader->getDbtype(), Parameters::DBTYPE_HMM_PROFILE);
-        evaluer = new EvalueComputation(par.dbSize == 0 ? tDbr->sequenceReader->getAminoAcidDBSize() : par.dbSize, subMat, gapOpen, gapExtend);
+        evaluer = new EvalueComputation(par.dbSize == 0 ? tDbr->sequenceReader->getAminoAcidDBSize() : par.dbSize, subMat, gapOpen, gapExtend, par.strand == 2);
     }
 
     DBReader<unsigned int> alnDbr(par.db3.c_str(), par.db3Index.c_str(), par.threads, DBReader<unsigned int>::USE_INDEX|DBReader<unsigned int>::USE_DATA);

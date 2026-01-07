@@ -53,7 +53,7 @@ int alignall(int argc, const char **argv, const Command &command) {
     DBWriter resultWriter(par.db3.c_str(), par.db3Index.c_str(), par.threads, par.compressed, Parameters::DBTYPE_GENERIC_DB);
     resultWriter.open();
 
-    EvalueComputation evaluer(par.dbSize == 0? tdbr.getAminoAcidDBSize() : par.dbSize, subMat, gapOpen, gapExtend);
+    EvalueComputation evaluer(par.dbSize == 0? tdbr.getAminoAcidDBSize() : par.dbSize, subMat, gapOpen, gapExtend, par.strand == 2);
     const size_t flushSize = 100000000;
     size_t iterations = static_cast<int>(ceil(static_cast<double>(dbr_res.getSize()) / static_cast<double>(flushSize)));
 

@@ -159,6 +159,8 @@ Alignment::Alignment(const std::string &querySeqDB, const std::string &targetSeq
         gapExtend = par.gapExtend.values.aminoacid();
     }
 
+    bothStrands = par.strand == 2 ? true : false;
+
     realign_m = NULL;
     if (realign == true && realignScoreBias != 0.0f) {
         if (Parameters::isEqualDbtype(querySeqType, Parameters::DBTYPE_NUCLEOTIDES)) {
@@ -272,7 +274,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
         return;
     }
 
-    EvalueComputation evaluer(targetDbSize == 0? tdbr->getAminoAcidDBSize() : targetDbSize, this->m, gapOpen, gapExtend);
+    EvalueComputation evaluer(targetDbSize == 0? tdbr->getAminoAcidDBSize() : targetDbSize, this->m, gapOpen, gapExtend, bothStrands);
 
     size_t totalMemory = Util::getTotalSystemMemory();
     size_t flushSize = 1000000;

@@ -379,6 +379,7 @@ Parameters::Parameters():
     alignall.push_back(&PARAM_MIN_SEQ_ID);
     alignall.push_back(&PARAM_MIN_ALN_LEN);
     alignall.push_back(&PARAM_SEQ_ID_MODE);
+    alignall.push_back(&PARAM_STRAND);
 //    alignall.push_back(&PARAM_ALT_ALIGNMENT);
     alignall.push_back(&PARAM_C);
     alignall.push_back(&PARAM_COV_MODE);
@@ -434,6 +435,7 @@ Parameters::Parameters():
     align.push_back(&PARAM_CORR_SCORE_WEIGHT);
     align.push_back(&PARAM_GAP_OPEN);
     align.push_back(&PARAM_GAP_EXTEND);
+    align.push_back(&PARAM_STRAND);
     align.push_back(&PARAM_ZDROP);
     align.push_back(&PARAM_THREADS);
     align.push_back(&PARAM_COMPRESSED);
@@ -486,6 +488,7 @@ Parameters::Parameters():
     ungappedprefilter.push_back(&PARAM_NO_COMP_BIAS_CORR);
     ungappedprefilter.push_back(&PARAM_NO_FORCE_COMP_BIAS_CORR);
     ungappedprefilter.push_back(&PARAM_NO_COMP_BIAS_CORR_SCALE);
+    ungappedprefilter.push_back(&PARAM_STRAND);
     ungappedprefilter.push_back(&PARAM_REMAP_PROFILE);
     ungappedprefilter.push_back(&PARAM_MIN_DIAG_SCORE);
     ungappedprefilter.push_back(&PARAM_MAX_SEQS);
@@ -542,6 +545,7 @@ Parameters::Parameters():
     rescorediagonal.push_back(&PARAM_MIN_SEQ_ID);
     rescorediagonal.push_back(&PARAM_MIN_ALN_LEN);
     rescorediagonal.push_back(&PARAM_SEQ_ID_MODE);
+    rescorediagonal.push_back(&PARAM_STRAND);
     rescorediagonal.push_back(&PARAM_INCLUDE_IDENTITY);
     rescorediagonal.push_back(&PARAM_SORT_RESULTS);
     rescorediagonal.push_back(&PARAM_PRELOAD_MODE);
@@ -560,6 +564,7 @@ Parameters::Parameters():
     alignbykmer.push_back(&PARAM_E);
     alignbykmer.push_back(&PARAM_DB_SIZE);
     alignbykmer.push_back(&PARAM_COV_MODE);
+    alignbykmer.push_back(&PARAM_STRAND);
     alignbykmer.push_back(&PARAM_MIN_SEQ_ID);
     alignbykmer.push_back(&PARAM_MIN_ALN_LEN);
     alignbykmer.push_back(&PARAM_INCLUDE_IDENTITY);
@@ -609,6 +614,7 @@ Parameters::Parameters():
     result2profile.push_back(&PARAM_PC_MODE);
     result2profile.push_back(&PARAM_PCA);
     result2profile.push_back(&PARAM_PCB);
+    result2profile.push_back(&PARAM_STRAND);
     result2profile.push_back(&PARAM_PRELOAD_MODE);
     result2profile.push_back(&PARAM_GAP_OPEN);
     result2profile.push_back(&PARAM_GAP_EXTEND);
@@ -640,6 +646,7 @@ Parameters::Parameters():
     results2profile.push_back(&PARAM_PC_MODE);
     results2profile.push_back(&PARAM_PCA);
     results2profile.push_back(&PARAM_PCB);
+    results2profile.push_back(&PARAM_STRAND);
     results2profile.push_back(&PARAM_PRELOAD_MODE);
     results2profile.push_back(&PARAM_GAP_OPEN);
     results2profile.push_back(&PARAM_GAP_EXTEND);
@@ -673,6 +680,7 @@ Parameters::Parameters():
     convertalignments.push_back(&PARAM_TRANSLATION_TABLE);
     convertalignments.push_back(&PARAM_GAP_OPEN);
     convertalignments.push_back(&PARAM_GAP_EXTEND);
+    convertalignments.push_back(&PARAM_STRAND);
     convertalignments.push_back(&PARAM_DB_OUTPUT);
     convertalignments.push_back(&PARAM_PRELOAD_MODE);
     convertalignments.push_back(&PARAM_SEARCH_TYPE);
@@ -684,6 +692,7 @@ Parameters::Parameters():
     result2msa.push_back(&PARAM_SUB_MAT);
     result2msa.push_back(&PARAM_GAP_OPEN);
     result2msa.push_back(&PARAM_GAP_EXTEND);
+    result2msa.push_back(&PARAM_STRAND);
     result2msa.push_back(&PARAM_ALLOW_DELETION);
     result2msa.push_back(&PARAM_NO_COMP_BIAS_CORR);
     result2msa.push_back(&PARAM_NO_COMP_BIAS_CORR_SCALE);
@@ -706,6 +715,7 @@ Parameters::Parameters():
     results2msa.push_back(&PARAM_SUB_MAT);
     results2msa.push_back(&PARAM_GAP_OPEN);
     results2msa.push_back(&PARAM_GAP_EXTEND);
+    results2msa.push_back(&PARAM_STRAND);
     results2msa.push_back(&PARAM_ALLOW_DELETION);
     results2msa.push_back(&PARAM_NO_COMP_BIAS_CORR);
     results2msa.push_back(&PARAM_NO_COMP_BIAS_CORR_SCALE);
@@ -788,6 +798,7 @@ Parameters::Parameters():
     msa2profile.push_back(&PARAM_FILTER_NDIFF);
     msa2profile.push_back(&PARAM_GAP_OPEN);
     msa2profile.push_back(&PARAM_GAP_EXTEND);
+    msa2profile.push_back(&PARAM_STRAND);
     msa2profile.push_back(&PARAM_SKIP_QUERY);
 #ifdef GAP_POS_SCORING
     msa2profile.push_back(&PARAM_GAP_PSEUDOCOUNT);
@@ -1056,6 +1067,7 @@ Parameters::Parameters():
     proteinaln2nucl.push_back(&PARAM_SUB_MAT);
     proteinaln2nucl.push_back(&PARAM_GAP_OPEN);
     proteinaln2nucl.push_back(&PARAM_GAP_EXTEND);
+    proteinaln2nucl.push_back(&PARAM_STRAND);
     proteinaln2nucl.push_back(&PARAM_THREADS);
     proteinaln2nucl.push_back(&PARAM_COMPRESSED);
     proteinaln2nucl.push_back(&PARAM_V);
@@ -1335,6 +1347,7 @@ Parameters::Parameters():
 //    expandaln.push_back(&PARAM_SEQ_ID_MODE);
     expandaln.push_back(&PARAM_C);
     expandaln.push_back(&PARAM_COV_MODE);
+    expandaln.push_back(&PARAM_STRAND);
     expandaln.push_back(&PARAM_PC_MODE);
     expandaln.push_back(&PARAM_PCA);
     expandaln.push_back(&PARAM_PCB);
@@ -1431,6 +1444,7 @@ Parameters::Parameters():
     proteomecluster.push_back(&PARAM_SEQ_ID_MODE);
     proteomecluster.push_back(&PARAM_C);
     proteomecluster.push_back(&PARAM_COV_MODE);
+    proteomecluster.push_back(&PARAM_STRAND);
     proteomecluster.push_back(&PARAM_MAX_SEQ_LEN);
     proteomecluster.push_back(&PARAM_NO_COMP_BIAS_CORR);
     proteomecluster.push_back(&PARAM_NO_COMP_BIAS_CORR_SCALE);

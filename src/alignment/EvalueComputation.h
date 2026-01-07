@@ -9,10 +9,10 @@
 
 class EvalueComputation {
 public:
-    EvalueComputation(size_t dbResCount, BaseMatrix *subMat) : dbResCount(dbResCount) {
+    EvalueComputation(size_t dbResCount, BaseMatrix *subMat, bool bothStrands=true) : dbResCount(dbResCount), bothStrands(bothStrands) {
         init(subMat, 0, 0, false);
     }
-    EvalueComputation(size_t dbResCount, BaseMatrix *subMat, int gapOpen, int gapExtend) : dbResCount(dbResCount) {
+    EvalueComputation(size_t dbResCount, BaseMatrix *subMat, int gapOpen, int gapExtend, bool bothStrands=true) : dbResCount(dbResCount), bothStrands(bothStrands) {
         init(subMat, gapOpen, gapExtend, true);
     }
 
@@ -36,7 +36,7 @@ public:
 
     inline double computeEvalue(double score, double seqLength) {
         const double epa = evaluer.evaluePerArea( score );
-        const double a = area( score, seqLength ) * 2; // double it for the reverse complement
+        const double a = area( score, seqLength ) * (bothStrands ? 2 : 1); // double it for the reverse complement
         return 0.0382461572658595 * pow(epa * a, 0.8283631544068919); // Correcting e-value
     }
 
@@ -167,6 +167,7 @@ private:
     Sls::AlignmentEvaluer evaluer;
     const size_t dbResCount;
     double logK;
+    bool bothStrands;
 
     struct EvalueParameters {
         const std::string matrixName;

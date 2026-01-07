@@ -103,6 +103,9 @@ private:
     int gapOpen;
     // costs to extend a gap
     int gapExtend;
+    
+    // using both strands or not
+    bool bothStrands;
 
     // correction score weight
     float correlationScoreWeight;

@@ -191,7 +191,7 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
     for (size_t i = 0; i < tDbrs.size(); i++) {
         autoDbSize += tDbrs[i]->getAminoAcidDBSize();
     }
-    EvalueComputation evalueComputation(par.dbSize == 0 ? autoDbSize : par.dbSize, &subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid());
+    EvalueComputation evalueComputation(par.dbSize == 0 ? autoDbSize : par.dbSize, &subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid(), par.strand == 2);
 
     if (qDbr->getDbtype() == -1 || targetSeqType == -1) {
         Debug(Debug::ERROR) << "Please recreate your database or add a .dbtype file to your sequence/profile database\n";

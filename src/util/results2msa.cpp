@@ -196,7 +196,7 @@ int results2msa(int argc, const char **argv, const Command &command) {
 
     // adjust score of each match state by -0.2 to trim alignment
     SubstitutionMatrix subMat(par.scoringMatrixFile.values.aminoacid().c_str(), 2.0f, -0.2f);
-    EvalueComputation evalueComputation(par.dbSize == 0 ? tDbr->getAminoAcidDBSize() : par.dbSize, &subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid());
+    EvalueComputation evalueComputation(par.dbSize == 0 ? tDbr->getAminoAcidDBSize() : par.dbSize, &subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid(), par.strand == 2);
     if (qDbr->getDbtype() == -1 || tDbr->getDbtype() == -1) {
         Debug(Debug::ERROR) << "Please recreate your database or add a .dbtype file to your sequence/profile database\n";
         return EXIT_FAILURE;

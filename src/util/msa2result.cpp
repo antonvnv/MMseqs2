@@ -146,7 +146,7 @@ int msa2result(int argc, const char **argv, const Command &command) {
     // and not the total number of residues
     // also, since not all against all comparisons were carried out, it is not straight-forward to
     // decide what to correct for.
-    EvalueComputation evaluer(msaReader.getSize(), &subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid());
+    EvalueComputation evaluer(msaReader.getSize(), &subMat, par.gapOpen.values.aminoacid(), par.gapExtend.values.aminoacid(), par.strand == 2);
 
     Debug::Progress progress(msaReader.getSize());
 #pragma omp parallel
