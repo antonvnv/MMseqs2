@@ -26,6 +26,7 @@ set(GENERATED_WORKFLOWS
         workflow/blastsplitdi.sh
         workflow/blastdigp.sh
         workflow/blastsplitdigp.sh
+        workflow/blastsplitdigp2.sh
         workflow/searchslicedtargetprofile.sh
         workflow/taxonomy.sh
         workflow/linsearch.sh

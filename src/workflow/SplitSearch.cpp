@@ -7,6 +7,7 @@
 // #include "searchtargetprofile.sh.h"
 // #include "searchslicedtargetprofile.sh.h"
 #include "blastsplitdigp.sh.h"
+#include "blastsplitdigp2.sh.h"
 // #include "translated_search.sh.h"
 #include "blastsplitdi.sh.h"
 #include "blastsplitp.sh.h"
@@ -240,7 +241,7 @@ int splitsearch(int argc, const char **argv, const Command& command) {
     size_t targetDbSize = 0;
     if (par.dbSize == 0) {
         // Read in the database sizes except queryDB, resultDB, and tmp
-        for (size_t i = 1; i < par.filenames.size()-2; ++i) {
+        for (size_t i = 1 + (par.deepSearch ? 1 : 0); i < par.filenames.size()-2; ++i) {
             DBReader<unsigned int> dbr(par.filenames[i].c_str(), (par.filenames[i] + ".index").c_str(), par.threads,
                                             DBReader<unsigned int>::USE_INDEX | DBReader<unsigned int>::USE_DATA);
             dbr.open(DBReader<unsigned int>::NOSORT);
@@ -251,6 +252,7 @@ int splitsearch(int argc, const char **argv, const Command& command) {
     if (par.dbSize != targetDbSize) {
         Debug(Debug::WARNING) << "The provided database size (" << par.dbSize << ") does not match the actual database size (" << targetDbSize << "). Using provided database size.\n";
     }
+    size_t ori_dbSize = par.dbSize;
 
     const int queryDbType = FileUtil::parseDbType(par.db1.c_str());
     if (queryDbType == -1 || targetDbType == -1) {
@@ -509,6 +511,7 @@ int splitsearch(int argc, const char **argv, const Command& command) {
 
         double originalEval = par.evalThr;
         par.evalThr = (par.evalThr < par.evalProfile) ? par.evalThr  : par.evalProfile;
+        int ori_strand = par.strand;
         for (int i = 0; i < par.numIterations; i++) {
             if (i == 0) {
                 if (par.compBiasCorrection) {
@@ -546,22 +549,51 @@ int splitsearch(int argc, const char **argv, const Command& command) {
             } else if (par.prefMode == Parameters::PREF_MODE_UNGAPPED) {
                 cmd.addVariable(std::string("UNGAPPEDPREFILTER_PAR_" + SSTR(i)).c_str(),
                                 par.createParameterString(par.ungappedprefilter).c_str());
+                if (par.deepSearch) {
+                    par.strand = 1;
+                    par.dbSize = 0;
+                    cmd.addVariable(std::string("UNGAPPEDPREFILTER_STR_PAR_" + SSTR(i)).c_str(),
+                                    par.createParameterString(par.ungappedprefilter).c_str());
+                    par.strand = ori_strand;
+                    par.dbSize = ori_dbSize;
+                }
             }
             if (isUngappedMode) {
                 par.rescoreMode = Parameters::RESCORE_MODE_ALIGNMENT;
                 cmd.addVariable(std::string("ALIGNMENT_PAR_" + SSTR(i)).c_str(),
                                 par.createParameterString(par.rescorediagonal).c_str());
+                if (par.deepSearch) {
+                    par.strand = 1;
+                    par.dbSize = 0;
+                    cmd.addVariable(std::string("ALIGNMENT_STR_PAR_" + SSTR(i)).c_str(),
+                                    par.createParameterString(par.rescorediagonal).c_str());
+                    par.strand = ori_strand;
+                    par.dbSize = ori_dbSize;
+                }
                 par.rescoreMode = originalRescoreMode;
             } else {
                 cmd.addVariable(std::string("ALIGNMENT_PAR_" + SSTR(i)).c_str(),
                                 par.createParameterString(par.align).c_str());
+                if (par.deepSearch) {
+                    par.strand = 1;
+                    par.dbSize = 0;
+                    cmd.addVariable(std::string("ALIGNMENT_STR_PAR_" + SSTR(i)).c_str(),
+                                    par.createParameterString(par.align).c_str());
+                    par.strand = ori_strand;
+                    par.dbSize = ori_dbSize;
+                }
             }
             cmd.addVariable(std::string("PROFILE_PAR_" + SSTR(i)).c_str(),
                             par.createParameterString(par.results2profile).c_str());
         }
 
-        FileUtil::writeFile(tmpDir + "/blastsplitdigp.sh", blastsplitdigp_sh, blastsplitdigp_sh_len);
-        program = std::string(tmpDir + "/blastsplitdigp.sh");
+        if (par.deepSearch) {
+            FileUtil::writeFile(tmpDir + "/blastsplitdigp2.sh", blastsplitdigp2_sh, blastsplitdigp2_sh_len);
+            program = std::string(tmpDir + "/blastsplitdigp2.sh");
+        } else {
+            FileUtil::writeFile(tmpDir + "/blastsplitdigp.sh", blastsplitdigp_sh, blastsplitdigp_sh_len);
+            program = std::string(tmpDir + "/blastsplitdigp.sh");
+        }
     } else {
         if (par.sensSteps > 1) {
             if (par.gpu != 0) {
@@ -615,7 +647,7 @@ int splitsearch(int argc, const char **argv, const Command& command) {
     }
 
     // Check if it is running blastsplitdigp.sh
-    if (program.find("blastsplitdigp") == std::string::npos) {
+    if (program.find("blastsplitdigp") == std::string::npos && program.find("blastsplitdigp2")) {
         // if (par.gpu != 0) {
         //     Debug(Debug::ERROR) << "No GPU support in nucleotide search\n";
         //     EXIT(EXIT_FAILURE);
