@@ -546,6 +546,11 @@ void SubstitutionMatrix::setupDinucleotideLetterMapping(){
     this->tail[this->aa2num[(int)'J']] = this->aa2num[(int)'V'];
     this->tail[this->aa2num[(int)'O']] = this->aa2num[(int)'W'];
     this->tail[this->aa2num[(int)'U']] = this->aa2num[(int)'Y'];
+    this->tail[this->aa2num[(int)'T']] = this->aa2num[(int)'X'];
+    this->tail[this->aa2num[(int)'V']] = this->aa2num[(int)'X'];
+    this->tail[this->aa2num[(int)'W']] = this->aa2num[(int)'X'];
+    this->tail[this->aa2num[(int)'Y']] = this->aa2num[(int)'X'];
+    this->tail[this->aa2num[(int)'X']] = this->aa2num[(int)'X'];
 
     // Set up dinucleotide to the first or the second nucleotide
     this->dinucToNuc[this->aa2num[(int)'C']] = this->aa2num[(int)'A'];
