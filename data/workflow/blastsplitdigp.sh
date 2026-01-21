@@ -190,7 +190,7 @@ while [ "$STEP" -lt "$NUM_IT" ]; do
         # offset alignment
         if notExists "$TMP_PATH/aln_offset_${STEP}_${i}.done"; then
             # shellcheck disable=SC2086
-            "$MMSEQS" offsetalignment "$ORIQUERYDB" "$QUERYDB" "$ori_target" "$TARGETDB" "$TMP_PATH/aln_double_${STEP}_${i}" "$TMP_PATH/aln_offset_${STEP}_${i}" ${OFFSETALIGNMENT_PAR} \
+            "$MMSEQS" offsetalignment "$ORIQUERYDB" "$QUERYDB" "$ori_target" "$TARGETDB" "$MERGE_INPUT" "$TMP_PATH/aln_offset_${STEP}_${i}" ${OFFSETALIGNMENT_PAR} \
                 || fail "Offset step died"
             # replace alignment with offset alignment
             if [ "$STEP" -eq 0 ]; then
