@@ -66,7 +66,7 @@ STEP=0
 [ -z "$NUM_IT" ] && NUM_IT=3;
 while [ "$STEP" -lt "$NUM_IT" ]; do
     # call prefilter module
-    if notExists "$TMP_PATH/pref_${STEP}.done"; then
+    if notExists "$TMP_PATH/pref_tmp_${STEP}.done"; then
         if [ "$PREFMODE" = "EXHAUSTIVE" ]; then
             TMP=""
             PREF="fake_pref"
@@ -123,7 +123,7 @@ while [ "$STEP" -lt "$NUM_IT" ]; do
             $RUNNER $PREF "$QUERYDB" "$TARGETDB" "$TMP_PATH/pref_tmp_$STEP" ${TMP} \
                 || fail "Prefilter died"
         fi
-        touch "$TMP_PATH/pref_${STEP}.done"
+        touch "$TMP_PATH/pref_tmp_${STEP}.done"
     fi
 
     if [ "$STEP" -ge 1 ]; then
