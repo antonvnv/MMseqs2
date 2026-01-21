@@ -50,8 +50,7 @@ QUERYDB="$1"
 ORIQUERYDB="$1"
 TARGETDB="$2"
 TMP_PATH="$4"
-OFFSET_INPUT=""
-SUBTRACT_INPUT=""
+MERGE_INPUT=""
 
 if [ -n "$NEEDTARGETSPLIT" ]; then
     if notExists "$TMP_PATH/target_seqs_split.dbtype"; then
@@ -67,7 +66,7 @@ STEP=0
 [ -z "$NUM_IT" ] && NUM_IT=3;
 while [ "$STEP" -lt "$NUM_IT" ]; do
     # call prefilter module
-    if notExists "$TMP_PATH/pref_tmp_${STEP}.done"; then
+    if notExists "$TMP_PATH/pref_${STEP}.done"; then
         if [ "$PREFMODE" = "EXHAUSTIVE" ]; then
             TMP=""
             PREF="fake_pref"
@@ -124,14 +123,14 @@ while [ "$STEP" -lt "$NUM_IT" ]; do
             $RUNNER $PREF "$QUERYDB" "$TARGETDB" "$TMP_PATH/pref_tmp_$STEP" ${TMP} \
                 || fail "Prefilter died"
         fi
-        touch "$TMP_PATH/pref_tmp_${STEP}.done"
+        touch "$TMP_PATH/pref_${STEP}.done"
     fi
 
     if [ "$STEP" -ge 1 ]; then
         if notExists "$TMP_PATH/pref_$STEP.done"; then
             STEPONE=$((STEP-1))
             # shellcheck disable=SC2086
-            "$MMSEQS" subtractdbs "$TMP_PATH/pref_tmp_$STEP" "$SUBTRACT_INPUT" "$TMP_PATH/pref_$STEP" $SUBSTRACT_PAR \
+            "$MMSEQS" subtractdbs "$TMP_PATH/pref_tmp_$STEP" "$TMP_PATH/aln_double_$STEPONE" "$TMP_PATH/pref_$STEP" $SUBSTRACT_PAR \
                 || fail "Substract died"
             # # shellcheck disable=SC2086
             # "$MMSEQS" subtractdbs "$TMP_PATH/pref_tmp_$STEP" "$TMP_PATH/aln_$STEPONE" "$TMP_PATH/pref_$STEP" $SUBSTRACT_PAR \
@@ -147,15 +146,14 @@ while [ "$STEP" -lt "$NUM_IT" ]; do
         eval TMP="\$$PARAM"
 
         if [ "$STEP" -eq 0 ]; then
-            OFFSET_INPUT="$TMP_PATH/aln_double_$STEP"
-            SUBTRACT_INPUT="$TMP_PATH/aln_double_$STEP"
+            MERGE_INPUT="$TMP_PATH/aln_double_$STEP"
             # shellcheck disable=SC2086
-            $RUNNER "$MMSEQS" "${ALIGN_MODULE}" "$QUERYDB" "$TARGETDB" "$TMP_PATH/pref_$STEP" "$OFFSET_INPUT" ${TMP} \
+            $RUNNER "$MMSEQS" "${ALIGN_MODULE}" "$QUERYDB" "$TARGETDB" "$TMP_PATH/pref_$STEP" "$MERGE_INPUT" ${TMP} \
                 || fail "Alignment died"
         else
-            OFFSET_INPUT="$TMP_PATH/aln_tmp_double_$STEP"
+            MERGE_INPUT="$TMP_PATH/aln_tmp_double_$STEP"
             # shellcheck disable=SC2086
-            $RUNNER "$MMSEQS" "${ALIGN_MODULE}" "$QUERYDB" "$TARGETDB" "$TMP_PATH/pref_$STEP" "$OFFSET_INPUT" ${TMP} \
+            $RUNNER "$MMSEQS" "${ALIGN_MODULE}" "$QUERYDB" "$TARGETDB" "$TMP_PATH/pref_$STEP" "$MERGE_INPUT" ${TMP} \
                 || fail "Alignment died"
         fi
         touch "$TMP_PATH/aln_tmp_$STEP.done"
@@ -163,15 +161,15 @@ while [ "$STEP" -lt "$NUM_IT" ]; do
 
     # merge alignments for the next round
     if [ "$STEP" -gt 0 ]; then
+        STEPONE=$((STEP-1))
         if notExists "$TMP_PATH/merge_aln_double_$STEP.done"; then
             if [ "$STEP" -ne "$((NUM_IT  - 1))" ]; then
                 # merge alignments before offset
-                "$MMSEQS" mergedbs "$QUERYDB" "$TMP_PATH/aln_merge_$STEP" "$SUBTRACT_INPUT" "$OFFSET_INPUT" \
+                "$MMSEQS" mergedbs "$QUERYDB" "$TMP_PATH/aln_double_$STEP" "$TMP_PATH/aln_double_$STEPONE" "$MERGE_INPUT" \
                     || fail "Alignment died"
-                "$MMSEQS" rmdb "$SUBTRACT_INPUT"
-                SUBTRACT_INPUT="$TMP_PATH/aln_merge_$STEP"
+                "$MMSEQS" rmdb "$TMP_PATH/aln_double_$STEPONE"
             else
-                "$MMSEQS" rmdb "$SUBTRACT_INPUT"
+                "$MMSEQS" rmdb "$TMP_PATH/aln_double_$STEPONE"
             fi
             touch "$TMP_PATH/merge_aln_double_$STEP.done"
         fi
@@ -180,7 +178,7 @@ while [ "$STEP" -lt "$NUM_IT" ]; do
     # offset alignment
     if notExists "$TMP_PATH/aln_offset_$STEP.done"; then
         # shellcheck disable=SC2086
-        "$MMSEQS" offsetalignment "$ORIQUERYDB" "$QUERYDB" "$2" "$TARGETDB" "$OFFSET_INPUT" "$TMP_PATH/aln_offset_$STEP" ${OFFSETALIGNMENT_PAR} \
+        "$MMSEQS" offsetalignment "$ORIQUERYDB" "$QUERYDB" "$2" "$TARGETDB" "$TMP_PATH/aln_double_$STEP" "$TMP_PATH/aln_offset_$STEP" ${OFFSETALIGNMENT_PAR} \
             || fail "Offset step died"
         # replace alignment with offset alignment
         if [ "$STEP" -eq 0 ]; then
