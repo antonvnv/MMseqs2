@@ -1891,7 +1891,7 @@ namespace cudasw4{
                 cudaSetDevice(deviceIds[gpu]); CUERR;
                 auto& ws = *workingSets[gpu];
                 ws.d_query.resize(currentQueryLengthWithPadding);
-                cudaMemsetAsync(ws.d_query.data() + currentQueryLength, 25, currentQueryLengthWithPadding - currentQueryLength, gpuStreams[gpu]);
+                cudaMemsetAsync(ws.d_query.data() + currentQueryLength, 24, currentQueryLengthWithPadding - currentQueryLength, gpuStreams[gpu]);
                 cudaMemcpyAsync(ws.d_query.data(), queryView.ptr, currentQueryLength, cudaMemcpyDefault, gpuStreams[gpu]); CUERR
 
                 if constexpr(!QueryView::isEncoded){
