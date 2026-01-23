@@ -401,7 +401,7 @@ void runFilterOnCpu(Parameters & par, BaseMatrix * subMat, int8_t * tinySubMat,
                 if(sequenceLookup == NULL){
                     char * targetSeq = tdbr->getData(tId, thread_idx);
                     unsigned int targetSeqLen = tdbr->getSeqLen(tId);
-                    tSeq.mapSequence(tId, targetKey, targetSeq, targetSeqLen, false, NULL, reverse);
+                    tSeq.mapSequence(tId, targetKey, targetSeq, targetSeqLen, false, NULL, reverse, false, 1.0f, tdbr->isPadded());
                     // mask numSequence
                     unsigned char xChar = subMat->aa2num[static_cast<int>('X')];
                     for (int i = 0; i < tSeq.L; i++) {
