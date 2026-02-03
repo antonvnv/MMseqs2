@@ -219,7 +219,7 @@ struct ClampToInvalid{
     unsigned int operator()(const unsigned int& packed4) {
         #ifdef __CUDA_ARCH__
 
-        constexpr unsigned int mask20 = 0x14141414; // decimal 20 per byte
+        constexpr unsigned int mask20 = 0x18181818; // decimal 24 per byte
         return __vminu4(packed4, mask20);
 
         #else
