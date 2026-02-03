@@ -1188,6 +1188,7 @@ public:
     std::vector<MMseqsParameter*> filtera3m;
     std::vector<MMseqsParameter*> filterresult;
     std::vector<MMseqsParameter*> convertmsa;
+    std::vector<MMseqsParameter*> msa2db;
     std::vector<MMseqsParameter*> msa2profile;
     std::vector<MMseqsParameter*> createtsv;
     std::vector<MMseqsParameter*> result2stats;

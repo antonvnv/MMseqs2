@@ -779,6 +779,11 @@ Parameters::Parameters():
     convertmsa.push_back(&PARAM_COMPRESSED);
     convertmsa.push_back(&PARAM_V);
 
+    // msa2db
+    msa2db.push_back(&PARAM_IDENTIFIER_OFFSET);
+    msa2db.push_back(&PARAM_COMPRESSED);
+    msa2db.push_back(&PARAM_V);
+
     // msa2profile
     msa2profile.push_back(&PARAM_MSA_TYPE);
     msa2profile.push_back(&PARAM_SUB_MAT);

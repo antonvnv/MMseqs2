@@ -40,6 +40,7 @@ set(util_source_files
         util/mergeresultsbyset.cpp
         util/mergedbs.cpp
         util/createclusterdb.cpp
+        util/msa2db.cpp
         util/msa2profile.cpp
         util/msa2result.cpp
         util/nrtotaxmapping.cpp

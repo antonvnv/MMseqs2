@@ -80,6 +80,7 @@ extern int maskbygff(int argc, const char **argv, const Command& command);
 extern int mergeclusters(int argc, const char **argv, const Command& command);
 extern int mergedbs(int argc, const char **argv, const Command& command);
 extern int mergeresultsbyset(int argc, const char **argv, const Command &command);
+extern int msa2db(int argc, const char **argv, const Command& command);
 extern int msa2profile(int argc, const char **argv, const Command& command);
 extern int sequence2profile(int argc, const char **argv, const Command& command);
 extern int createclusearchdb(int argc, const char **argv, const Command& command);

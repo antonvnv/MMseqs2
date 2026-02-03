@@ -194,6 +194,16 @@ std::vector<Command> baseCommands = {
                 "<i:msaFile.sto[.gz]> <o:msaDB>",
                 CITATION_SERVER |CITATION_MMSEQS2, {{"msaFile.sto[.gz]", DbType::ACCESS_MODE_INPUT, DbType::NEED_DATA, &DbValidator::flatfile },
                                                            {"msaDB",DbType::ACCESS_MODE_OUTPUT, DbType::NEED_DATA, &DbValidator::msaDb }}},
+        {"msa2db",               msa2db,               &par.msa2db,               COMMAND_DATABASE_CREATION,
+                "Convert MSA files (FASTA/A3M) to a MSA DB",
+                "# Convert multiple MSA files to a msaDB:\n"
+                "mmseqs msa2db msa1.fa msa2.fa msa3.a3m msaDB\n\n"
+                "# Convert MSA files listed in a TSV file:\n"
+                "mmseqs msa2db files.tsv msaDB\n",
+                "Martin Steinegger <martin.steinegger@snu.ac.kr>",
+                "<i:msaFile1[.gz]> ... <i:msaFileN[.gz]> <o:msaDB>",
+                CITATION_MMSEQS2, {{"msaFile[.gz]", DbType::ACCESS_MODE_INPUT, DbType::NEED_DATA | DbType::VARIADIC, &DbValidator::flatfile },
+                                          {"msaDB", DbType::ACCESS_MODE_OUTPUT, DbType::NEED_DATA, &DbValidator::msaDb }}},
         {"tsv2db",               tsv2db,               &par.tsv2db,               COMMAND_DATABASE_CREATION | COMMAND_EXPERT,
                 "Convert a TSV file to any DB",
                 NULL,
