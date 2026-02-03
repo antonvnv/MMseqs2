@@ -30,6 +30,8 @@
 #include "GpuUtil.h"
 #include "Alignment.h"
 #include <signal.h>
+#include <algorithm>
+#include <cuda_runtime.h>
 #endif
 
 #ifdef HAVE_CUDA
@@ -135,6 +137,12 @@ void runFilterOnGpu(Parameters & par, BaseMatrix * subMat,
 
     const bool serverMode = par.gpuServer;
     Marv* marv = NULL;
+    
+    // Database chunking variables for large databases
+    std::vector<std::pair<size_t, size_t>> dbChunks; // (startIdx, endIdx) for each chunk
+    std::vector<void*> dbHandles;
+    size_t numChunks = 1;
+    
     if (serverMode == 0) {
        if (offsetData == NULL || lengthData == NULL) {
            Debug(Debug::ERROR) << "Invalid GPU database\n";
@@ -143,12 +151,64 @@ void runFilterOnGpu(Parameters & par, BaseMatrix * subMat,
         int32_t maxTargetLength = lengths.back();
         Marv::AlignmentType type = (par.prefMode == Parameters::PREF_MODE_UNGAPPED_AND_GAPPED) ?
                 Marv::AlignmentType::GAPLESS_SMITH_WATERMAN : Marv::AlignmentType::GAPLESS;
-        marv = new Marv(tdbr->getSize(), subMat->alphabetSize, maxTargetLength,
-                        par.maxResListLen, type);
-        void* h = marv->loadDb(
-            tdbr->getDataForFile(0), offsetData, lengthData, tdbr->getDataSizeForFile(0)
-        );
-        marv->setDb(h);
+        
+        // Get total available GPU memory across all devices
+        std::vector<int> deviceIds = Marv::getDeviceIds();
+        size_t totalGpuMem = 0;
+        size_t totalFreeMem = 0;
+        for (int deviceId : deviceIds) {
+            cudaSetDevice(deviceId);
+            size_t freeMem = 0, totalMem = 0;
+            cudaMemGetInfo(&freeMem, &totalMem);
+            totalGpuMem += totalMem;
+            totalFreeMem += freeMem;
+        }
+        cudaSetDevice(deviceIds[0]); // Reset to first device
+        
+        // Estimate database size (sequence data + overhead for GPU structures)
+        size_t dbDataSize = tdbr->getDataSizeForFile(0);
+        // GPU overhead: ~1x for database data
+        size_t estimatedGpuUsage = dbDataSize;
+        
+        // Use 80% of available free memory as usable, leave headroom for kernels and temp storage
+        size_t usableGpuMem = (size_t)(totalFreeMem * 0.8);
+        
+        if (estimatedGpuUsage > usableGpuMem) {
+            // Database is too large, need to split into chunks
+            numChunks = (estimatedGpuUsage + usableGpuMem - 1) / usableGpuMem;
+            size_t seqsPerChunk = (tdbr->getSize() + numChunks - 1) / numChunks;
+            
+            Debug(Debug::INFO) << "Database size (" << (dbDataSize / (1024*1024)) << " MB) exceeds available GPU memory ("
+                               << (usableGpuMem / (1024*1024)) << " MB). Splitting into " << numChunks << " chunks.\n";
+            
+            for (size_t chunk = 0; chunk < numChunks; chunk++) {
+                size_t startIdx = 0;
+                size_t domainSize = 0;
+                tdbr->decomposeDomainByAminoAcid(chunk, numChunks, &startIdx, &domainSize);
+                if (startIdx < tdbr->getSize()) {
+                    dbChunks.push_back({startIdx, startIdx + domainSize});
+                }
+            }
+            numChunks = dbChunks.size();
+        } else {
+            // Database fits in GPU memory, single chunk
+            dbChunks.push_back({0, tdbr->getSize()});
+        }
+        
+        // Load database
+        if (numChunks == 1) {
+            // Single chunk - create Marv and load entire database
+            marv = new Marv(tdbr->getSize(), subMat->alphabetSize, maxTargetLength,
+                            par.maxResListLen, type);
+            void* h = marv->loadDb(
+                tdbr->getDataForFile(0), offsetData, lengthData, tdbr->getDataSizeForFile(0)
+            );
+            marv->setDb(h);
+            dbHandles.push_back(h);
+        } else {
+            // Multiple chunks - Marv instances will be created on-demand during the query loop
+            Debug(Debug::INFO) << "Using chunked database loading with " << numChunks << " chunks\n";
+        }
     } else if (layout == NULL) {
        Debug(Debug::ERROR) << "No GPU server shared memory connection\n";
        EXIT(EXIT_FAILURE);
@@ -159,177 +219,328 @@ void runFilterOnGpu(Parameters & par, BaseMatrix * subMat,
         act.sa_handler = intHandlerClient;
         sigaction(SIGINT, &act, NULL);
         sigaction(SIGTERM, &act, NULL);
+        dbChunks.push_back({0, tdbr->getSize()}); // Server mode uses single "chunk"
     }
 
-    // marv.prefetch();
-    for (size_t id = 0; id < qdbr->getSize(); id++) {
+    // For multi-chunk mode: store accumulated results per query across all chunks
+    // Map from query id to vector of results from all chunks
+    std::vector<std::vector<Marv::Result>> allQueryResults;
+    if (numChunks > 1) {
+        allQueryResults.resize(qdbr->getSize());
+        for (size_t i = 0; i < qdbr->getSize(); i++) {
+            allQueryResults[i].reserve(numChunks * par.maxResListLen);
+        }
+    }
+
+    // Outer loop: iterate through database chunks
+    for (size_t chunkIdx = 0; chunkIdx < numChunks; chunkIdx++) {
         if (!keepRunningClient) {
             break;
         }
-        size_t queryKey = qdbr->getDbKey(id);
-        unsigned int querySeqLen = qdbr->getSeqLen(id);
-        char *querySeqData = qdbr->getData(id, 0);
-
-	// Get the header
-        char *queryHeaderData = qhdbr->getData(id, 0);
-        Orf::SequenceLocation qloc = Orf::parseOrfHeader(queryHeaderData);
-        bool reverse = (qloc.strand == Orf::STRAND_PLUS) ? false : true;
-
-        qSeq.mapSequence(id, queryKey, querySeqData, querySeqLen, par.remapProfile, subMat, reverse, par.forceCompBiasCorrection, par.compBiasCorrectionScale);
-        if (Parameters::isEqualDbtype(querySeqType, Parameters::DBTYPE_HMM_PROFILE)) {
-            profile = qSeq.profile_for_alignment;
-        } else {
-            if ((size_t)qSeq.L >= profileBufferLength) {
-                profileBufferLength = (size_t)qSeq.L * 1.5;
-                profile = (int8_t*)realloc(profile, subMat->alphabetSize * profileBufferLength * sizeof(int8_t));
+        
+        Marv* currentMarv = marv;
+        size_t chunkStart = dbChunks[chunkIdx].first;
+        size_t chunkEnd = dbChunks[chunkIdx].second;
+        size_t chunkSize = chunkEnd - chunkStart;
+        
+        // For multi-chunk mode, create and load chunk-specific Marv instance
+        std::vector<size_t> chunkOffsets;
+        std::vector<int32_t> chunkLengths;
+        if (numChunks > 1) {
+            Debug(Debug::INFO) << "Processing chunk " << (chunkIdx + 1) << "/" << numChunks 
+                               << " (sequences " << chunkStart << "-" << chunkEnd << ")\n";
+            
+            // Prepare chunk-specific offsets and lengths
+            chunkOffsets.resize(chunkSize + 1);
+            chunkLengths.resize(chunkSize);
+            size_t baseOffset = offsets[chunkStart];
+            for (size_t i = 0; i < chunkSize; i++) {
+                chunkOffsets[i] = offsets[chunkStart + i] - baseOffset;
+                chunkLengths[i] = lengths[chunkStart + i];
             }
-            if (compositionBias != NULL) {
-                if ((size_t)qSeq.L >= compBufferSize) {
-                    compBufferSize = (size_t)qSeq.L * 1.5 * sizeof(float);
-                    compositionBias = (float*)realloc(compositionBias, compBufferSize);
-                    // memset(compositionBias, 0, compBufferSize);
-                }
-                SubstitutionMatrix::calcLocalAaBiasCorrection(subMat, qSeq.numSequence, qSeq.L, compositionBias, par.compBiasCorrectionScale);
-            }
-            for (size_t j = 0; j < (size_t)subMat->alphabetSize; ++j) {
-                for (size_t i = 0; i < (size_t)qSeq.L; ++i) {
-                    short bias = 0;
-                    if (compositionBias != NULL) {
-                        bias = static_cast<short>((compositionBias[i] < 0.0) ? (compositionBias[i] - 0.5) : (compositionBias[i] + 0.5));
-                    }
-                    profile[j * qSeq.L  + i] = subMat->subMatrix[j][qSeq.numSequence[i]] + bias;
-                }
-            }
+            chunkOffsets[chunkSize] = offsets[chunkEnd] - baseOffset;
+            
+            // Calculate chunk data size and find max length for this chunk
+            size_t chunkDataSize = chunkOffsets[chunkSize];
+            int32_t chunkMaxLength = *std::max_element(chunkLengths.begin(), chunkLengths.end());
+            
+            // Create Marv instance for this chunk
+            Marv::AlignmentType type = (par.prefMode == Parameters::PREF_MODE_UNGAPPED_AND_GAPPED) ?
+                    Marv::AlignmentType::GAPLESS_SMITH_WATERMAN : Marv::AlignmentType::GAPLESS;
+            currentMarv = new Marv(chunkSize, subMat->alphabetSize, chunkMaxLength,
+                                   par.maxResListLen, type);
+            
+            // Load chunk database
+            void* chunkHandle = currentMarv->loadDb(
+                tdbr->getDataForFile(0) + baseOffset,
+                chunkOffsets.data(),
+                chunkLengths.data(),
+                chunkDataSize
+            );
+            currentMarv->setDb(chunkHandle);
         }
-        Marv::Stats stats;
-        if (serverMode == 0) {
-            stats = marv->scan(reinterpret_cast<const char *>(qSeq.numSequence), qSeq.L, profile, results.data());
-        } else {
-            bool claimed = false;
-            while (!claimed) {
-                if (layout->serverExit.load(std::memory_order_acquire) == true) {
-                    // server has shut down
-                    Debug(Debug::ERROR) << "GPU server has unexpectedly shut down\n";
-                    EXIT(EXIT_FAILURE);
+        
+        // Inner loop: iterate through all queries for this chunk
+        for (size_t id = 0; id < qdbr->getSize(); id++) {
+            if (!keepRunningClient) {
+                break;
+            }
+            size_t queryKey = qdbr->getDbKey(id);
+            unsigned int querySeqLen = qdbr->getSeqLen(id);
+            char *querySeqData = qdbr->getData(id, 0);
+
+            // Get the header
+            char *queryHeaderData = qhdbr->getData(id, 0);
+            Orf::SequenceLocation qloc = Orf::parseOrfHeader(queryHeaderData);
+            bool reverse = (qloc.strand == Orf::STRAND_PLUS) ? false : true;
+
+            qSeq.mapSequence(id, queryKey, querySeqData, querySeqLen, par.remapProfile, subMat, reverse, par.forceCompBiasCorrection, par.compBiasCorrectionScale);
+            if (Parameters::isEqualDbtype(querySeqType, Parameters::DBTYPE_HMM_PROFILE)) {
+                profile = qSeq.profile_for_alignment;
+            } else {
+                if ((size_t)qSeq.L >= profileBufferLength) {
+                    profileBufferLength = (size_t)qSeq.L * 1.5;
+                    profile = (int8_t*)realloc(profile, subMat->alphabetSize * profileBufferLength * sizeof(int8_t));
                 }
+                if (compositionBias != NULL) {
+                    if ((size_t)qSeq.L >= compBufferSize) {
+                        compBufferSize = (size_t)qSeq.L * 1.5 * sizeof(float);
+                        compositionBias = (float*)realloc(compositionBias, compBufferSize);
+                    }
+                    SubstitutionMatrix::calcLocalAaBiasCorrection(subMat, qSeq.numSequence, qSeq.L, compositionBias, par.compBiasCorrectionScale);
+                }
+                for (size_t j = 0; j < (size_t)subMat->alphabetSize; ++j) {
+                    for (size_t i = 0; i < (size_t)qSeq.L; ++i) {
+                        short bias = 0;
+                        if (compositionBias != NULL) {
+                            bias = static_cast<short>((compositionBias[i] < 0.0) ? (compositionBias[i] - 0.5) : (compositionBias[i] + 0.5));
+                        }
+                        profile[j * qSeq.L  + i] = subMat->subMatrix[j][qSeq.numSequence[i]] + bias;
+                    }
+                }
+            }
+            
+            Marv::Stats stats;
+            stats.results = 0;
+            if (serverMode == 0) {
+                stats = currentMarv->scan(reinterpret_cast<const char *>(qSeq.numSequence), qSeq.L, profile, results.data());
+                
+                if (numChunks > 1) {
+                    // Multi-chunk: accumulate results with adjusted global IDs
+                    for (size_t i = 0; i < stats.results; i++) {
+                        Marv::Result res = results[i];
+                        res.id = res.id + chunkStart; // Convert local ID to global ID
+                        allQueryResults[id].push_back(res);
+                    }
+                }
+            } else {
+                bool claimed = false;
+                while (!claimed) {
+                    if (layout->serverExit.load(std::memory_order_acquire) == true) {
+                        Debug(Debug::ERROR) << "GPU server has unexpectedly shut down\n";
+                        EXIT(EXIT_FAILURE);
+                    }
+                    if (keepRunningClient == false) {
+                        EXIT(EXIT_FAILURE);
+                    }
+
+                    int expected = GPUSharedMemory::IDLE;
+                    int desired = GPUSharedMemory::RESERVED;
+                    if (layout->state.compare_exchange_strong(expected, desired, std::memory_order_acq_rel)) {
+                        claimed = true;
+                        memcpy(layout->getQueryPtr(), qSeq.numSequence, qSeq.L);
+                        memcpy(layout->getProfilePtr(), profile, subMat->alphabetSize * qSeq.L);
+                        layout->queryLen = qSeq.L;
+                        std::atomic_thread_fence(std::memory_order_release);
+                        layout->state.store(GPUSharedMemory::READY, std::memory_order_release);
+
+                        while (true) {
+                            if (layout->serverExit.load(std::memory_order_acquire) == true) {
+                                Debug(Debug::ERROR) << "GPU server has unexpectedly shut down\n";
+                                EXIT(EXIT_FAILURE);
+                            }
+
+                            if (layout->state.load(std::memory_order_acquire) == GPUSharedMemory::DONE) {
+                                break;
+                            } else {
+                                std::this_thread::yield();
+                            }
+                        }
+
+                        std::atomic_thread_fence(std::memory_order_acquire);
+                        memcpy(results.data(), layout->getResultsPtr(), layout->resultLen * sizeof(Marv::Result));
+                        stats.results = layout->resultLen;
+                        layout->state.store(GPUSharedMemory::IDLE, std::memory_order_release);
+                        if (keepRunningClient == false) {
+                            EXIT(EXIT_FAILURE);
+                        }
+                    } else {
+                        std::this_thread::yield();
+                    }
+                }
+            }
+            
+            // For single chunk or server mode: process results immediately
+            if (numChunks == 1 || serverMode != 0) {
                 if (keepRunningClient == false) {
                     EXIT(EXIT_FAILURE);
                 }
 
-                int expected = GPUSharedMemory::IDLE;
-                int desired = GPUSharedMemory::RESERVED;
-                if (layout->state.compare_exchange_strong(expected, desired, std::memory_order_acq_rel)) {
-                    // Debug(Debug::ERROR) << "switch to reserved\n";
-                    claimed = true;
-                    memcpy(layout->getQueryPtr(), qSeq.numSequence, qSeq.L);
-                    memcpy(layout->getProfilePtr(), profile, subMat->alphabetSize * qSeq.L);
-                    layout->queryLen = qSeq.L;
-                    std::atomic_thread_fence(std::memory_order_release);
-                    // Debug(Debug::ERROR) << "switch to ready\n";
-                    layout->state.store(GPUSharedMemory::READY, std::memory_order_release);
-
-                    while (true) {
-                        if (layout->serverExit.load(std::memory_order_acquire) == true) {
-                            Debug(Debug::ERROR) << "GPU server has unexpectedly shut down\n";
-                            EXIT(EXIT_FAILURE);
+                for(size_t i = 0; i < stats.results; i++){
+                    unsigned int targetKey = tdbr->getDbKey(results[i].id);
+                    int score = results[i].score;
+                    if(taxonomyHook != NULL){
+                        TaxID currTax = taxonomyHook->taxonomyMapping->lookup(targetKey);
+                        if (taxonomyHook->expression[0]->isAncestor(currTax) == false) {
+                            continue;
                         }
-
-                        if (layout->state.load(std::memory_order_acquire) == GPUSharedMemory::DONE) {
-                            break;
+                    }
+                    bool hasDiagScore = (score > par.minDiagScoreThr);
+                    const bool isIdentity = (queryKey == targetKey && (par.includeIdentity || sameDB))? true : false;
+                    
+                    if (isIdentity || hasDiagScore) {
+                        if(par.prefMode == Parameters::PREF_MODE_UNGAPPED_AND_GAPPED){
+                            Matcher::result_t res;
+                            res.dbKey = targetKey;
+                            res.eval = evaluer->computeEvalue(score, qSeq.L);
+                            res.dbEndPos = results[i].dbEndPos;
+                            res.dbLen = tdbr->getSeqLen(results[i].id);
+                            res.qEndPos =  results[i].qEndPos;
+                            res.qLen = qSeq.L;
+                            unsigned int qAlnLen = std::max(static_cast<unsigned int>(res.qEndPos), static_cast<unsigned int>(1));
+                            unsigned int dbAlnLen = std::max(static_cast<unsigned int>(res.dbEndPos), static_cast<unsigned int>(1));
+                            res.seqId = Matcher::estimateSeqIdByScorePerCol(score, qAlnLen, dbAlnLen);
+                            res.qcov = SmithWaterman::computeCov(0, res.qEndPos, res.qLen );
+                            res.dbcov = SmithWaterman::computeCov(0, res.dbEndPos, res.dbLen );
+                            res.score = evaluer->computeBitScore(score);
+                            if(Alignment::checkCriteria(res, isIdentity, par.evalThr,  par.seqIdThr,  par.alnLenThr,  par.covMode,  par.covThr)){
+                                resultsAln.emplace_back(res);
+                            }
                         } else {
-                            std::this_thread::yield();
+                            hit_t hit;
+                            hit.seqId = targetKey;
+                            hit.prefScore = score;
+                            hit.diagonal = 0;
+                            shortResults.emplace_back(hit);
                         }
                     }
-
-                    std::atomic_thread_fence(std::memory_order_acquire);
-                    memcpy(results.data(), layout->getResultsPtr(), layout->resultLen * sizeof(Marv::Result));
-                    stats.results = layout->resultLen;
-                    // Debug(Debug::ERROR) << "switch to idle\n";
-                    layout->state.store(GPUSharedMemory::IDLE, std::memory_order_release);
-                    if (keepRunningClient == false) {
-                        EXIT(EXIT_FAILURE);
+                }
+                if(par.prefMode == Parameters::PREF_MODE_UNGAPPED_AND_GAPPED) {
+                    SORT_PARALLEL(resultsAln.begin(), resultsAln.end(), Matcher::compareHits);
+                    size_t maxSeqs = std::min(par.maxResListLen, resultsAln.size());
+                    for (size_t i = 0; i < maxSeqs; ++i) {
+                        size_t len = Matcher::resultToBuffer(buffer, resultsAln[i], false);
+                        resultBuffer.append(buffer, len);
                     }
-                } else {
-                    std::this_thread::yield();
-                }
-            }
-        }
-        if (keepRunningClient == false) {
-            EXIT(EXIT_FAILURE);
-        }
-
-        for(size_t i = 0; i < stats.results; i++){
-            unsigned int targetKey = tdbr->getDbKey(results[i].id);
-            int score = results[i].score;
-            if(taxonomyHook != NULL){
-                TaxID currTax = taxonomyHook->taxonomyMapping->lookup(targetKey);
-                if (taxonomyHook->expression[0]->isAncestor(currTax) == false) {
-                    continue;
-                }
-            }
-            // check if evalThr != inf
-            // double evalue = 0.0;
-            // if (par.evalThr < std::numeric_limits<double>::max()) {
-            //     evalue = evaluer->computeEvalue(score, qSeq.L);
-            // }
-            // bool hasEvalue = (evalue <= par.evalThr);
-            bool hasDiagScore = (score > par.minDiagScoreThr);
-
-            const bool isIdentity = (queryKey == targetKey && (par.includeIdentity || sameDB))? true : false;
-            // --filter-hits
-            if (isIdentity || hasDiagScore) {
-                if(par.prefMode == Parameters::PREF_MODE_UNGAPPED_AND_GAPPED){
-                    Matcher::result_t res;
-                    res.dbKey = targetKey;
-                    res.eval = evaluer->computeEvalue(score, qSeq.L);
-                    res.dbEndPos = results[i].dbEndPos;
-                    res.dbLen = tdbr->getSeqLen(results[i].id);
-                    res.qEndPos =  results[i].qEndPos;
-                    res.qLen = qSeq.L;
-                    unsigned int qAlnLen = std::max(static_cast<unsigned int>(res.qEndPos), static_cast<unsigned int>(1));
-                    unsigned int dbAlnLen = std::max(static_cast<unsigned int>(res.dbEndPos), static_cast<unsigned int>(1));
-                    //seqId = (alignment.score1 / static_cast<float>(std::max(dbAlnLen, qAlnLen)))  * 0.1656 + 0.1141;
-                    res.seqId = Matcher::estimateSeqIdByScorePerCol(score, qAlnLen, dbAlnLen);
-                    res.qcov = SmithWaterman::computeCov(0, res.qEndPos, res.qLen );
-                    res.dbcov = SmithWaterman::computeCov(0, res.dbEndPos, res.dbLen );
-                    res.score = evaluer->computeBitScore(score);
-                    if(Alignment::checkCriteria(res, isIdentity, par.evalThr,  par.seqIdThr,  par.alnLenThr,  par.covMode,  par.covThr)){
-                        resultsAln.emplace_back(res);
+                }else{
+                    SORT_PARALLEL(shortResults.begin(), shortResults.end(), hit_t::compareHitsByScoreAndId);
+                    size_t maxSeqs = std::min(par.maxResListLen, shortResults.size());
+                    for (size_t i = 0; i < maxSeqs; ++i) {
+                        size_t len = QueryMatcher::prefilterHitToBuffer(buffer, shortResults[i]);
+                        resultBuffer.append(buffer, len);
                     }
-                } else {
-                    hit_t hit;
-                    hit.seqId = targetKey;
-                    hit.prefScore = score;
-                    hit.diagonal = 0;
-                    shortResults.emplace_back(hit);
+                }
+
+                resultWriter.writeData(resultBuffer.c_str(), resultBuffer.length(), queryKey, 0);
+                resultBuffer.clear();
+                shortResults.clear();
+                resultsAln.clear();
+                progress.updateProgress();
+            }
+        } // end query loop
+        
+        // Cleanup chunk Marv instance (only for multi-chunk mode)
+        if (numChunks > 1 && currentMarv != NULL) {
+            delete currentMarv;
+        }
+    } // end chunk loop
+    
+    // For multi-chunk mode: merge results from all chunks and write output
+    if (numChunks > 1 && serverMode == 0) {
+        Debug(Debug::INFO) << "Merging results from all chunks...\n";
+        for (size_t id = 0; id < qdbr->getSize(); id++) {
+            if (!keepRunningClient) {
+                break;
+            }
+            size_t queryKey = qdbr->getDbKey(id);
+            unsigned int querySeqLen = qdbr->getSeqLen(id);
+            
+            // Sort accumulated results by score (descending)
+            std::vector<Marv::Result>& queryResults = allQueryResults[id];
+            std::sort(queryResults.begin(), queryResults.end(), 
+                [](const Marv::Result& a, const Marv::Result& b) {
+                    return a.score > b.score;
+                });
+            
+            // Keep top N results
+            size_t numResults = std::min(queryResults.size(), (size_t)par.maxResListLen);
+            
+            for(size_t i = 0; i < numResults; i++){
+                unsigned int targetKey = tdbr->getDbKey(queryResults[i].id);
+                int score = queryResults[i].score;
+                if(taxonomyHook != NULL){
+                    TaxID currTax = taxonomyHook->taxonomyMapping->lookup(targetKey);
+                    if (taxonomyHook->expression[0]->isAncestor(currTax) == false) {
+                        continue;
+                    }
+                }
+                bool hasDiagScore = (score > par.minDiagScoreThr);
+                const bool isIdentity = (queryKey == targetKey && (par.includeIdentity || sameDB))? true : false;
+                
+                if (isIdentity || hasDiagScore) {
+                    if(par.prefMode == Parameters::PREF_MODE_UNGAPPED_AND_GAPPED){
+                        Matcher::result_t res;
+                        res.dbKey = targetKey;
+                        res.eval = evaluer->computeEvalue(score, querySeqLen);
+                        res.dbEndPos = queryResults[i].dbEndPos;
+                        res.dbLen = tdbr->getSeqLen(queryResults[i].id);
+                        res.qEndPos = queryResults[i].qEndPos;
+                        res.qLen = querySeqLen;
+                        unsigned int qAlnLen = std::max(static_cast<unsigned int>(res.qEndPos), static_cast<unsigned int>(1));
+                        unsigned int dbAlnLen = std::max(static_cast<unsigned int>(res.dbEndPos), static_cast<unsigned int>(1));
+                        res.seqId = Matcher::estimateSeqIdByScorePerCol(score, qAlnLen, dbAlnLen);
+                        res.qcov = SmithWaterman::computeCov(0, res.qEndPos, res.qLen );
+                        res.dbcov = SmithWaterman::computeCov(0, res.dbEndPos, res.dbLen );
+                        res.score = evaluer->computeBitScore(score);
+                        if(Alignment::checkCriteria(res, isIdentity, par.evalThr,  par.seqIdThr,  par.alnLenThr,  par.covMode,  par.covThr)){
+                            resultsAln.emplace_back(res);
+                        }
+                    } else {
+                        hit_t hit;
+                        hit.seqId = targetKey;
+                        hit.prefScore = score;
+                        hit.diagonal = 0;
+                        shortResults.emplace_back(hit);
+                    }
                 }
             }
-        }
-        if(par.prefMode == Parameters::PREF_MODE_UNGAPPED_AND_GAPPED) {
-            SORT_PARALLEL(resultsAln.begin(), resultsAln.end(), Matcher::compareHits);
-            size_t maxSeqs = std::min(par.maxResListLen, resultsAln.size());
-            for (size_t i = 0; i < maxSeqs; ++i) {
-                size_t len = Matcher::resultToBuffer(buffer, resultsAln[i], false);
-                resultBuffer.append(buffer, len);
+            if(par.prefMode == Parameters::PREF_MODE_UNGAPPED_AND_GAPPED) {
+                SORT_PARALLEL(resultsAln.begin(), resultsAln.end(), Matcher::compareHits);
+                size_t maxSeqs = std::min(par.maxResListLen, resultsAln.size());
+                for (size_t i = 0; i < maxSeqs; ++i) {
+                    size_t len = Matcher::resultToBuffer(buffer, resultsAln[i], false);
+                    resultBuffer.append(buffer, len);
+                }
+            }else{
+                SORT_PARALLEL(shortResults.begin(), shortResults.end(), hit_t::compareHitsByScoreAndId);
+                size_t maxSeqs = std::min(par.maxResListLen, shortResults.size());
+                for (size_t i = 0; i < maxSeqs; ++i) {
+                    size_t len = QueryMatcher::prefilterHitToBuffer(buffer, shortResults[i]);
+                    resultBuffer.append(buffer, len);
+                }
             }
-        }else{
-            SORT_PARALLEL(shortResults.begin(), shortResults.end(), hit_t::compareHitsByScoreAndId);
-            size_t maxSeqs = std::min(par.maxResListLen, shortResults.size());
-            for (size_t i = 0; i < maxSeqs; ++i) {
-                size_t len = QueryMatcher::prefilterHitToBuffer(buffer, shortResults[i]);
-                resultBuffer.append(buffer, len);
-            }
-        }
 
-        resultWriter.writeData(resultBuffer.c_str(), resultBuffer.length(), queryKey, 0);
-        resultBuffer.clear();
-        shortResults.clear();
-        resultsAln.clear();
-        progress.updateProgress();
+            resultWriter.writeData(resultBuffer.c_str(), resultBuffer.length(), queryKey, 0);
+            resultBuffer.clear();
+            shortResults.clear();
+            resultsAln.clear();
+            progress.updateProgress();
+        }
     }
     if (marv != NULL) {
         delete marv;
-    } else {
+    }
+    if (serverMode != 0 && layout != NULL) {
         GPUSharedMemory::unmap(layout);
     }
 
