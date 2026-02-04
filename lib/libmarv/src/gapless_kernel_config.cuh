@@ -4,6 +4,12 @@
 #include <algorithm>
 #include <vector>
 #include <string>
+#include <stdexcept>
+
+// Macros matching those in pssmkernels_gapless.cuh
+#ifndef SDIV
+#define SDIV(x,y) (((x)+(y)-1)/(y))
+#endif
 
 namespace cudasw4{
 
@@ -43,6 +49,34 @@ namespace cudasw4{
         os << data.tilesize << " " << data.groupsize << " " << data.numRegs 
             << " " << data.dpx << " " << int(data.approach);
         return os;
+    }
+
+    // Calculate the shared memory requirement for a gapless kernel config
+    // This must match the SharedPSSM_singletile calculation in pssmkernels_gapless.cuh
+    __inline__
+    size_t calculateGaplessSharedMemory(int groupsize, int numRegs, int scoreTypeSize = 4){
+        constexpr int numRowsPSSM = 25;
+        // With USE_IMPROVED_SMEM (which is defined by default)
+        int numColumnsPSSM = std::max(groupsize, 8) * numRegs;
+        // SharedPSSM_singletile pads columns to 16-byte alignment
+        int numPaddedColumns = SDIV(numColumnsPSSM, 16/scoreTypeSize) * (16/scoreTypeSize);
+        return static_cast<size_t>(numRowsPSSM) * numPaddedColumns * scoreTypeSize;
+    }
+
+    // Filter configs to only include those that fit within the device's shared memory limit
+    __inline__
+    std::vector<GaplessKernelConfig> filterConfigsBySharedMemory(
+        const std::vector<GaplessKernelConfig>& configs, 
+        int maxSharedMemoryPerBlock
+    ){
+        std::vector<GaplessKernelConfig> filtered;
+        for(const auto& config : configs){
+            size_t requiredSmem = calculateGaplessSharedMemory(config.groupsize, config.numRegs);
+            if(requiredSmem <= static_cast<size_t>(maxSharedMemoryPerBlock)){
+                filtered.push_back(config);
+            }
+        }
+        return filtered;
     }
     
 
@@ -220,6 +254,10 @@ namespace cudasw4{
         cudaDeviceGetAttribute(&ccMajor, cudaDevAttrComputeCapabilityMajor, deviceId);
         cudaDeviceGetAttribute(&ccMinor, cudaDevAttrComputeCapabilityMinor, deviceId);
 
+        // Get the device's maximum shared memory per block (with opt-in)
+        int maxSharedMemoryPerBlock = 0;
+        cudaDeviceGetAttribute(&maxSharedMemoryPerBlock, cudaDevAttrMaxSharedMemoryPerBlockOptin, deviceId);
+
         std::vector<GaplessKernelConfig> configs;
 
         if(ccMajor == 7 && ccMinor == 5){
@@ -232,6 +270,15 @@ namespace cudasw4{
             configs = getOptimalKernelConfigs_gapless_sm90();
         }else{
             configs = getOptimalKernelConfigs_gapless_default();
+        }
+
+        // Filter out configs that would exceed the device's shared memory limit
+        configs = filterConfigsBySharedMemory(configs, maxSharedMemoryPerBlock);
+
+        if(configs.empty()){
+            throw std::runtime_error("No valid kernel configurations for this GPU. "
+                "Device max shared memory (" + std::to_string(maxSharedMemoryPerBlock) + 
+                " bytes) is too small for any gapless kernel configuration.");
         }
 
         return configs;
