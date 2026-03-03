@@ -467,7 +467,7 @@ int result2msa(int argc, const char **argv, const Command &command) {
 
                             // add lower case deletions
                             while(btPos < bt.size() && bt[btPos] == 'D') {
-                                result.push_back(tolower(subMat.num2aa[seq[seqStartPos+seqPos]]));
+                                result.push_back(tolower(subMat.num2aa[subMat.dinucToNuc[static_cast<int>(seq[seqStartPos+seqPos])]])); // TODO: change to dinucleotide by the option
                                 btPos++;
                                 seqPos++;
                             }
