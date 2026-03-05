@@ -143,7 +143,7 @@ int results2msa(int argc, const char **argv, const Command &command) {
     size_t dbFrom = 0;
     size_t dbSize = 0;
 #ifdef HAVE_MPI
-    resultReaders[0].decomposeDomainByAminoAcid(MMseqsMPI::rank, MMseqsMPI::numProc, &dbFrom, &dbSize);
+    resultReaders[0]->decomposeDomainByAminoAcid(MMseqsMPI::rank, MMseqsMPI::numProc, &dbFrom, &dbSize);
     Debug(Debug::INFO) << "Compute split from " << dbFrom << " to " << dbFrom + dbSize << "\n";
     std::pair<std::string, std::string> tmpOutput = Util::createTmpFileNames(outDb, outIndex, MMseqsMPI::rank);
 #else
