@@ -72,7 +72,7 @@ int results2profile(int argc, const char **argv, const Command &command, bool re
     size_t dbFrom = 0;
     size_t dbSize = 0;
 #ifdef HAVE_MPI
-    resultDbrs[0].decomposeDomainByAminoAcid(MMseqsMPI::rank, MMseqsMPI::numProc, &dbFrom, &dbSize);
+    resultDbrs[0]->decomposeDomainByAminoAcid(MMseqsMPI::rank, MMseqsMPI::numProc, &dbFrom, &dbSize);
     Debug(Debug::INFO) << "Compute split from " << dbFrom << " to " << dbFrom + dbSize << "\n";
     std::pair<std::string, std::string> tmpOutput = Util::createTmpFileNames(par.filenames[par.filenames.size() - 1], par.filenames[par.filenames.size() - 1] + ".index", MMseqsMPI::rank);
 #else
