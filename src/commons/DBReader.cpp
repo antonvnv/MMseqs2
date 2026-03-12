@@ -1319,13 +1319,21 @@ void DBReader<T>::copyDb(const std::string &databaseName, const std::string &out
 
 template<typename T>
 void DBReader<T>::decomposeDomainByAminoAcid(size_t worldRank, size_t worldSize, size_t *startEntry, size_t *numEntries){
+    // Distribute DB entries across workers, balancing by data size (bytes).
+    //   worldRank  - this worker's index (OMP thread id, MPI rank, or split index)
+    //   worldSize  - total workers (thread count, MPI world size, or split count)
+    //   dataSize   - total payload bytes across all entries (including null terminators)
+    //   dbEntries  - number of DB entries (sequences or profiles)
+    //
+    // When the DB is tiny (e.g. a single short query after dinucleotide encoding),
+    // worldSize can exceed dataSize -- meaning there aren't enough bytes to give
+    // each worker even one byte of work, so the byte-level chunking loop below
+    // cannot subdivide meaningfully. However, every DB entry has length >= 1,
+    // so dataSize >= dbEntries, i.e. dbEntries <= dataSize < worldSize -
+    // caught by the entry-level guard below that assigns one whole entry
+    // per worker.
     const size_t dataSize = getDataSize();
     const size_t dbEntries = getSize();
-    if (worldSize > dataSize) {
-        // Assume the domain numEntries is greater than the world numEntries.
-        Debug(Debug::ERROR) << "World Size: " << worldSize << " dbSize: " << dataSize << "\n";
-        EXIT(EXIT_FAILURE);
-    }
 
     if (worldSize == 1) {
         *startEntry = 0;
