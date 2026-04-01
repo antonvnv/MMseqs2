@@ -65,14 +65,14 @@ eval "res_base=\${$res_base}"
 while [ "$cur" -le "$last" ]; do
     eval "TARGET=\${$cur}"
     ori_target="$TARGET"
-    if [ -n "$NEEDTARGETSPLIT" ]; then
-        if notExists "$TMP_PATH/target_seqs_split.dbtype"; then
-            # shellcheck disable=SC2086
-            "$MMSEQS" splitsequence "$TARGET" "$TMP_PATH/target_seqs_split" ${SPLITSEQUENCE_PAR}  \
-                || fail "Split sequence died"
-        fi
-        TARGET="$TMP_PATH/target_seqs_split"
-    fi
+    # if [ -n "$NEEDTARGETSPLIT" ]; then
+    #     if notExists "$TMP_PATH/target_seqs_split.dbtype"; then
+    #         # shellcheck disable=SC2086
+    #         "$MMSEQS" splitsequence "$TARGET" "$TMP_PATH/target_seqs_split" ${SPLITSEQUENCE_PAR}  \
+    #             || fail "Split sequence died"
+    #     fi
+    #     TARGET="$TMP_PATH/target_seqs_split"
+    # fi
 
     mkdir -p "$TMP_PATH/search"
     if notExists "$TMP_PATH/aln_${i}.dbtype"; then
