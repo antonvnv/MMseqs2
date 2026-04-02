@@ -87,6 +87,11 @@ while [ "$cur" -le "$last" ]; do
         "$MMSEQS" offsetalignment "$1" "${QUERY}" "$ori_target" "${TARGET}" "$TMP_PATH/aln_${i}"  "${res_base}_${i}" ${OFFSETALIGNMENT_PAR} \
             || fail "Offset step died"
     fi
+    # Remove temporary files for next database
+    # shellcheck disable=SC2086
+    "$MMSEQS" rmdb "${TMP_PATH}/search/pref_0" ${VERBOSITY}
+    # shellcheck disable=SC2086
+    "$MMSEQS" rmdb "${TMP_PATH}/aln_${i}" ${VERBOSITY}
     i=$((i + 1))
     cur=$(( cur + 1 ))
 done

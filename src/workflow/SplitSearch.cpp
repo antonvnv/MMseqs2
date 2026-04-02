@@ -239,19 +239,19 @@ int splitsearch(int argc, const char **argv, const Command& command) {
     }
 
     size_t targetDbSize = 0;
-    if (par.dbSize == 0) {
-        // Read in the database sizes except queryDB, resultDB, and tmp
-        for (size_t i = 1 + (par.deepSearch ? 1 : 0); i < par.filenames.size()-2; ++i) {
-            DBReader<unsigned int> dbr(par.filenames[i].c_str(), (par.filenames[i] + ".index").c_str(), par.threads,
-                                            DBReader<unsigned int>::USE_INDEX | DBReader<unsigned int>::USE_DATA);
-            dbr.open(DBReader<unsigned int>::NOSORT);
-            targetDbSize += dbr.getAminoAcidDBSize();
-        }
-        par.dbSize = targetDbSize;
-    }
-    if (par.dbSize != targetDbSize) {
-        Debug(Debug::WARNING) << "The provided database size (" << par.dbSize << ") does not match the actual database size (" << targetDbSize << "). Using provided database size.\n";
-    }
+    // if (par.dbSize == 0) {
+    //     // Read in the database sizes except queryDB, resultDB, and tmp
+    //     for (size_t i = 1 + (par.deepSearch ? 1 : 0); i < par.filenames.size()-2; ++i) {
+    //         DBReader<unsigned int> dbr(par.filenames[i].c_str(), (par.filenames[i] + ".index").c_str(), par.threads,
+    //                                         DBReader<unsigned int>::USE_INDEX | DBReader<unsigned int>::USE_DATA);
+    //         dbr.open(DBReader<unsigned int>::NOSORT);
+    //         targetDbSize += dbr.getAminoAcidDBSize();
+    //     }
+    //     par.dbSize = targetDbSize;
+    // }
+    // if (par.dbSize != targetDbSize) {
+    //     Debug(Debug::WARNING) << "The provided database size (" << par.dbSize << ") does not match the actual database size (" << targetDbSize << "). Using provided database size.\n";
+    // }
     size_t ori_dbSize = par.dbSize;
 
     const int queryDbType = FileUtil::parseDbType(par.db1.c_str());
