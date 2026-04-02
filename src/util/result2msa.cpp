@@ -8,6 +8,7 @@
 #include "DBConcat.h"
 #include "HeaderSummarizer.h"
 #include "CompressedA3M.h"
+#include <limits>
 
 #ifdef OPENMP
 #include <omp.h>
@@ -20,6 +21,11 @@ int result2msa(int argc, const char **argv, const Command &command) {
     // do not filter by default
     par.filterMsa = 0;
     par.parseParameters(argc, argv, command, true, 0, 0);
+    // Keep infinite default only for this module; honor user-provided -e.
+    if (par.PARAM_E.wasSet == false) {
+        par.evalThr = std::numeric_limits<double>::infinity();
+    }
+    const double evalCutoff = par.evalThr;
 
     std::vector<std::string> qid_str_vec = Util::split(par.qid, ",");
     std::vector<int> qid_vec;
@@ -242,14 +248,34 @@ int result2msa(int argc, const char **argv, const Command &command) {
                 
                 const size_t columns = Util::getWordsOfLine(data, entry, 255);
                 if (columns > Matcher::ALN_RES_WITHOUT_BT_COL_CNT) {
-                    alnResults.emplace_back(Matcher::parseAlignmentRecord(data));
+                    Matcher::result_t parsedResult = Matcher::parseAlignmentRecord(data);
+                    if (parsedResult.eval > evalCutoff) {
+                        data = Util::skipLine(data);
+                        continue;
+                    }
+                    alnResults.emplace_back(parsedResult);
                 } else {
                     // Recompute if not all the backtraces are present
                     if (isQueryInit == false) {
                         matcher.initQuery(&centerSequence);
                         isQueryInit = true;
                     }
-                    alnResults.emplace_back(matcher.getSWResult(&edgeSequence, INT_MAX, false, 0, 0.0, FLT_MAX, Matcher::SCORE_COV_SEQID, 0, false));
+                    Matcher::result_t recomputedResult = matcher.getSWResult(
+                        &edgeSequence,
+                        INT_MAX,
+                        false,
+                        0,
+                        0.0,
+                        evalCutoff,
+                        Matcher::SCORE_COV_SEQID,
+                        0,
+                        false
+                    );
+                    if (recomputedResult.eval > evalCutoff) {
+                        data = Util::skipLine(data);
+                        continue;
+                    }
+                    alnResults.emplace_back(recomputedResult);
                 }
                 // Check if it is on the reverse strand or not
                 bool reverse = false;

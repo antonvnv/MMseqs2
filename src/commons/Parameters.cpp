@@ -706,6 +706,7 @@ Parameters::Parameters():
     result2msa.push_back(&PARAM_FILTER_QID);
     result2msa.push_back(&PARAM_FILTER_QSC);
     result2msa.push_back(&PARAM_FILTER_COV);
+    result2msa.push_back(&PARAM_E);
     result2msa.push_back(&PARAM_FILTER_NDIFF);
     result2msa.push_back(&PARAM_PRELOAD_MODE);
     result2msa.push_back(&PARAM_THREADS);
@@ -729,6 +730,7 @@ Parameters::Parameters():
     results2msa.push_back(&PARAM_FILTER_QID);
     results2msa.push_back(&PARAM_FILTER_QSC);
     results2msa.push_back(&PARAM_FILTER_COV);
+    results2msa.push_back(&PARAM_E);
     results2msa.push_back(&PARAM_FILTER_NDIFF);
     results2msa.push_back(&PARAM_PRELOAD_MODE);
     results2msa.push_back(&PARAM_THREADS);
