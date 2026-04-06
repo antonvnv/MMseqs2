@@ -132,31 +132,31 @@ std::vector<size_t> BaseMatrix::returnCanonicalIndices(size_t index) {
     std::vector<size_t> indices;
     switch (index) {
         case 16: // AX
-            indices = {0, 1, 2, 3};
+            indices = {1, 5, 9, 13}; // C, G, L, Q
             break;
         case 17: // CX
-            indices = {4, 5, 6, 7};
+            indices = {2, 4, 8, 14}; // D, F, R, K
             break;
         case 18: // GX
-            indices = {8, 9, 10, 11};
+            indices = {0, 7, 10, 12}; // M, A, P, I
             break;
         case 19: // TX/UX
-            indices = {12, 13, 14, 15};
+            indices = {3, 6, 11, 15}; // E, N, H, S
             break;
         case 20: // XA
-            indices = {0, 4, 8, 12};
+            indices = {1, 2, 3, 10}; // C, D, M, E
             break;
         case 21: // XC
-            indices = {1, 5, 9, 13};
+            indices = {0, 4, 5, 11}; // G, F, A, N
             break;
         case 22: // XG
-            indices = {2, 6, 10, 14};
+            indices = {6, 9, 12, 14}; // L, R, P, H
             break;
         case 23: // XU/T
-            indices = {3, 7, 11, 15};
+            indices = {7, 8, 13, 15}; // Q, K, I, S
             break;
         case 24: // XX
-            indices = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+            indices = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}; // A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S
             break;
         default:
             Debug(Debug::ERROR) << "Unexpected index for dinucleotide matrix\n";
