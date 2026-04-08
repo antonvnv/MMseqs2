@@ -105,7 +105,8 @@ private:
     int gapExtend;
     
     // using both strands or not
-    bool bothStrands;
+    // bool bothStrands;
+    int strand;
 
     // correction score weight
     float correlationScoreWeight;
@@ -120,9 +121,6 @@ private:
 
     DBReader<unsigned int> *qdbr;
     IndexReader * qDbrIdx;
-
-    DBReader<unsigned int> *qhdbr;
-    IndexReader * qhDbrIdx;
 
     DBReader<unsigned int> *tdbr;
     IndexReader * tDbrIdx;

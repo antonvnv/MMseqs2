@@ -12,7 +12,6 @@
 #include "Parameters.h"
 #include "FastSort.h"
 #include "Sequence.h"
-#include "Orf.h"
 
 #ifdef OPENMP
 #include <omp.h>
@@ -25,8 +24,8 @@ Alignment::Alignment(const std::string &querySeqDB, const std::string &targetSeq
         alnLenThr(par.alnLenThr), includeIdentity(par.includeIdentity), addBacktrace(par.addBacktrace), realign(par.realign), scoreBias(par.scoreBias), realignScoreBias(par.realignScoreBias), realignMaxSeqs(par.realignMaxSeqs),
         threads(static_cast<unsigned int>(par.threads)), compressed(par.compressed), outDB(outDB), outDBIndex(outDBIndex),
         maxSeqLen(par.maxSeqLen), compBiasCorrection(par.compBiasCorrection), forceCompBias(par.forceCompBiasCorrection), compBiasCorrectionScale(par.compBiasCorrectionScale), remapProfile(par.remapProfile), altAlignment(par.altAlignment), alignmentOutputMode(par.alignmentOutputMode),
-        maxAccept(static_cast<unsigned int>(par.maxAccept)), maxReject(static_cast<unsigned int>(par.maxRejected)), wrappedScoring(par.wrappedScoring),
-        lcaAlign(lcaAlign), qdbr(NULL), qDbrIdx(NULL), qhdbr(NULL), qhDbrIdx(NULL), tdbr(NULL), tDbrIdx(NULL) {
+        maxAccept(static_cast<unsigned int>(par.maxAccept)), maxReject(static_cast<unsigned int>(par.maxRejected)), wrappedScoring(par.wrappedScoring), strand(par.strand),
+        lcaAlign(lcaAlign), qdbr(NULL), qDbrIdx(NULL), tdbr(NULL), tDbrIdx(NULL) {
     unsigned int alignmentMode = par.alignmentMode;
     if (alignmentMode == Parameters::ALIGNMENT_MODE_UNGAPPED) {
         Debug(Debug::ERROR) << "Use rescorediagonal for ungapped alignment mode.\n";
@@ -76,10 +75,6 @@ Alignment::Alignment(const std::string &querySeqDB, const std::string &targetSeq
         qdbr = qDbrIdx->sequenceReader;
         querySeqType = qdbr->getDbtype();
     }
-    qhDbrIdx = new IndexReader(querySeqDB.c_str(), par.threads,
-                              extended & Parameters::DBTYPE_EXTENDED_INDEX_NEED_SRC ? IndexReader::SRC_HEADERS : IndexReader::HEADERS,
-                              (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0);
-    qhdbr = qhDbrIdx->sequenceReader;
 
     if (altAlignment > 0) {
         if (Parameters::isEqualDbtype(querySeqType, Parameters::DBTYPE_NUCLEOTIDES)) {
@@ -159,8 +154,6 @@ Alignment::Alignment(const std::string &querySeqDB, const std::string &targetSeq
         gapExtend = par.gapExtend.values.aminoacid();
     }
 
-    bothStrands = par.strand == 2 ? true : false;
-
     realign_m = NULL;
     if (realign == true && realignScoreBias != 0.0f) {
         if (Parameters::isEqualDbtype(querySeqType, Parameters::DBTYPE_NUCLEOTIDES)) {
@@ -219,13 +212,6 @@ Alignment::~Alignment() {
         }
     }
 
-    if(qhDbrIdx != NULL){
-        delete qhDbrIdx;
-    } else {
-        qhdbr->close();
-        delete qhdbr;
-    }
-
     prefdbr->close();
     delete prefdbr;
 }
@@ -274,7 +260,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
         return;
     }
 
-    EvalueComputation evaluer(targetDbSize == 0? tdbr->getAminoAcidDBSize() : targetDbSize, this->m, gapOpen, gapExtend, bothStrands);
+    EvalueComputation evaluer(targetDbSize == 0? tdbr->getAminoAcidDBSize() : targetDbSize, this->m, gapOpen, gapExtend, strand == 2);
 
     size_t totalMemory = Util::getTotalSystemMemory();
     size_t flushSize = 1000000;
@@ -351,10 +337,8 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
                         queryLen = origQueryLen*2;
                     }
 
-                    // Get the header
-                    char *queryHeaderData = qhdbr->getData(qId, thread_idx);
-                    Orf::SequenceLocation qloc = Orf::parseOrfHeader(queryHeaderData);
-                    reverse = (qloc.strand == Orf::STRAND_PLUS) ? false : true;
+                    // if strand is reverse (0) or strand is both (2) and id is even, then we have to think of reverse complement
+                    bool reverse = (strand == 0) || (strand == 2 && id % 2 == 0);
 
                     qSeq.mapSequence(qId, queryDbKey, querySeqData, queryLen, remapProfile, m, reverse, forceCompBias, compBiasCorrectionScale);
                     matcher.initQuery(&qSeq);

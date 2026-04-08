@@ -15,7 +15,6 @@
 #include "SubstitutionMatrixProfileStates.h"
 #include "IndexReader.h"
 #include "QueryMatcherTaxonomyHook.h"
-#include "Orf.h"
 
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -42,7 +41,7 @@ void intHandlerClient(int) {
 }
 
 void runFilterOnGpu(Parameters & par, BaseMatrix * subMat,
-                    DBReader<unsigned int> * qdbr, DBReader<unsigned int> * qhdbr, DBReader<unsigned int> * tdbr,
+                    DBReader<unsigned int> * qdbr, DBReader<unsigned int> * tdbr,
                     bool sameDB, DBWriter & resultWriter, EvalueComputation * evaluer,
                     QueryMatcherTaxonomyHook *taxonomyHook){
     Debug::Progress progress(qdbr->getSize());
@@ -289,10 +288,8 @@ void runFilterOnGpu(Parameters & par, BaseMatrix * subMat,
             unsigned int querySeqLen = qdbr->getSeqLen(id);
             char *querySeqData = qdbr->getData(id, 0);
 
-            // Get the header
-            char *queryHeaderData = qhdbr->getData(id, 0);
-            Orf::SequenceLocation qloc = Orf::parseOrfHeader(queryHeaderData);
-            bool reverse = (qloc.strand == Orf::STRAND_PLUS) ? false : true;
+            // if strand is reverse (0) or strand is both (2) and id is even, then we have to think of reverse complement
+            bool reverse = (par.strand == 0) || (par.strand == 2 && id % 2 == 0);
 
             qSeq.mapSequence(id, queryKey, querySeqData, querySeqLen, par.remapProfile, subMat, reverse, par.forceCompBiasCorrection, par.compBiasCorrectionScale);
             if (Parameters::isEqualDbtype(querySeqType, Parameters::DBTYPE_HMM_PROFILE)) {
@@ -554,7 +551,7 @@ void runFilterOnGpu(Parameters & par, BaseMatrix * subMat,
 #endif
 
 void runFilterOnCpu(Parameters & par, BaseMatrix * subMat, int8_t * tinySubMat,
-                    DBReader<unsigned int> * qdbr, DBReader<unsigned int> * qhdbr, DBReader<unsigned int> * tdbr,
+                    DBReader<unsigned int> * qdbr, DBReader<unsigned int> * tdbr,
                     SequenceLookup * sequenceLookup, bool sameDB, DBWriter & resultWriter, EvalueComputation * evaluer,
                     QueryMatcherTaxonomyHook *taxonomyHook, int alignmentMode){
     std::vector<hit_t> shortResults;
@@ -586,10 +583,8 @@ void runFilterOnCpu(Parameters & par, BaseMatrix * subMat, int8_t * tinySubMat,
             size_t queryKey = qdbr->getDbKey(id);
             unsigned int querySeqLen = qdbr->getSeqLen(id);
 
-            // Get the header
-            char *queryHeaderData = qhdbr->getData(id, thread_idx);
-            Orf::SequenceLocation qloc = Orf::parseOrfHeader(queryHeaderData);
-            bool reverse = (qloc.strand == Orf::STRAND_PLUS) ? false : true;
+            // if strand is reverse (0) or strand is both (2) and id is even, then we have to think of reverse complement
+            bool reverse = (par.strand == 0) || (par.strand == 2 && id % 2 == 0);
 
             qSeq.mapSequence(id, queryKey, querySeqData, querySeqLen, par.remapProfile, subMat, reverse, par.forceCompBiasCorrection, par.compBiasCorrectionScale);
 //            qSeq.printProfileStatePSSM();
@@ -708,9 +703,7 @@ int prefilterInternal(int argc, const char **argv, const Command &command, int m
     bool touch = (par.preloadMode != Parameters::PRELOAD_MODE_MMAP);
     IndexReader tDbrIdx(par.db2, par.threads, IndexReader::SEQUENCES, (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0 );
     IndexReader * qDbrIdx = NULL;
-    IndexReader * qhDbrIdx = NULL;
     DBReader<unsigned int> * qdbr = NULL;
-    DBReader<unsigned int> * qhdbr = NULL;
     DBReader<unsigned int> * tdbr = tDbrIdx.sequenceReader;
 
     if (par.gpu == true) {
@@ -734,8 +727,6 @@ int prefilterInternal(int argc, const char **argv, const Command &command, int m
         qdbr = qDbrIdx->sequenceReader;
         querySeqType = qdbr->getDbtype();
     }
-    qhDbrIdx = new IndexReader(par.db1.c_str(), par.threads, IndexReader::HEADERS, (touch) ? (IndexReader::PRELOAD_INDEX | IndexReader::PRELOAD_DATA) : 0);
-    qhdbr = qhDbrIdx->sequenceReader;
 
     SequenceLookup * sequenceLookup = NULL;
     if(Parameters::isEqualDbtype(tDbrIdx.getDbtype(), Parameters::DBTYPE_INDEX_DB)){
@@ -775,14 +766,14 @@ int prefilterInternal(int argc, const char **argv, const Command &command, int m
     }
     if(par.gpu){
 #ifdef HAVE_CUDA
-        runFilterOnGpu(par, subMat, qdbr, qhdbr, tdbr, sameDB,
+        runFilterOnGpu(par, subMat, qdbr, tdbr, sameDB,
                        resultWriter, evaluer, taxonomyHook);
 #else
         Debug(Debug::ERROR) << "MMseqs2 was compiled without CUDA support\n";
         EXIT(EXIT_FAILURE);
 #endif
     }else{
-        runFilterOnCpu(par, subMat, tinySubMat, qdbr, qhdbr, tdbr, sequenceLookup, sameDB,
+        runFilterOnCpu(par, subMat, tinySubMat, qdbr, tdbr, sequenceLookup, sameDB,
                    resultWriter, evaluer, taxonomyHook,  mode);
     }
 
@@ -799,7 +790,6 @@ int prefilterInternal(int argc, const char **argv, const Command &command, int m
     if(sameDB == false){
         delete qDbrIdx;
     }
-    delete qhDbrIdx;
 
     delete [] tinySubMat;
     delete subMat;
