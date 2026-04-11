@@ -256,16 +256,6 @@ void PSSMCalculator::profileToString(std::string& result, size_t queryLength){
     result.append(1, '\n');
 }
 
-void PSSMCalculator::normalizeProbs(std::vector<float> &probs) {
-    float sum = 0.0f;
-    for (float prob : probs) {
-        sum += prob;
-    }
-    for (float &prob : probs) {
-        prob /= sum;
-    }
-}
-
 void PSSMCalculator::computeLogPSSM(BaseMatrix *subMat, char *pssm, const float *profile, float bitFactor, size_t queryLength, float scoreBias) {
     // Initialize fPssm
     float *fPssm = new float[queryLength * Sequence::PROFILE_AA_SIZE];
@@ -283,20 +273,17 @@ void PSSMCalculator::computeLogPSSM(BaseMatrix *subMat, char *pssm, const float 
             pssm[idx] = truncPssmVal;
         }
         // 8 non-canonical dinucleotides, average from canonical ones
-        std::vector<float> probs;
         for(;aa < Sequence::PROFILE_AA_SIZE; aa++) {
             const unsigned int idx = pos * Sequence::PROFILE_AA_SIZE + aa;
             float pssmVal = 0.0f;
-            probs.clear();
+            float backgroundProbsSum = 0.0f;
+            float profileProbsSum = 0.0f;
             std::vector<size_t> indices = subMat->returnCanonicalIndices(aa);
             for (size_t i : indices) {
-                probs.push_back(profile[pos * Sequence::PROFILE_AA_SIZE + i]);
+                backgroundProbsSum += subMat->pBack[i];
+                profileProbsSum += profile[pos * Sequence::PROFILE_AA_SIZE + i];
             }
-            normalizeProbs(probs);
-            for (size_t i = 0; i < probs.size(); i++) {
-                pssmVal += probs[i] * profile[pos * Sequence::PROFILE_AA_SIZE + indices[i]] / subMat->pBack[indices[i]];
-            }
-            pssmVal = bitFactor * MathUtil::flog2(pssmVal) + bitFactor * scoreBias;
+            pssmVal = bitFactor * MathUtil::flog2(profileProbsSum / backgroundProbsSum) + bitFactor * scoreBias;
             pssmVal = static_cast<char>((pssmVal < 0.0) ? pssmVal - 0.5 : pssmVal + 0.5);
             float truncPssmVal =  std::min(pssmVal, 127.0f);
             truncPssmVal       =  std::max(-128.0f, truncPssmVal);
