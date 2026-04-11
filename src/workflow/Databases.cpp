@@ -309,6 +309,20 @@ int databases(int argc, const char **argv, const Command &command) {
     cmd.addVariable("ARIA_NUM_CONN", SSTR(std::min(16, par.threads)).c_str());
     cmd.addVariable("THREADS_PAR", par.createParameterString(par.onlythreads).c_str());
     cmd.addVariable("THREADS_COMP_PAR", par.createParameterString(par.threadsandcompression).c_str());
+    if (downloadIdx >= 0 && par.downloadDir.empty() == false) {
+        std::string dlDir = par.downloadDir;
+        // Resolve relative paths against CWD
+        if (dlDir[0] != '/') {
+            char cwd[PATH_MAX];
+            if (getcwd(cwd, sizeof(cwd)) != NULL) {
+                dlDir = std::string(cwd) + "/" + dlDir;
+            }
+        }
+        if (FileUtil::directoryExists(dlDir.c_str()) == false) {
+            FileUtil::makeDir(dlDir.c_str());
+        }
+        cmd.addVariable("DOWNLOAD_DIR", dlDir.c_str());
+    }
     std::string program = tmpDir + "/download.sh";
     if (downloadIdx >= 0) {
         FileUtil::writeFile(program, usedDownloads[downloadIdx].script, usedDownloads[downloadIdx].scriptLength);
