@@ -256,6 +256,16 @@ void PSSMCalculator::profileToString(std::string& result, size_t queryLength){
     result.append(1, '\n');
 }
 
+void PSSMCalculator::normalizeProbs(const std::vector<float> &probs) {
+    float sum = 0.0f;
+    for (float prob : probs) {
+        sum += prob;
+    }
+    for (float &prob : probs) {
+        prob /= sum;
+    }
+}
+
 void PSSMCalculator::computeLogPSSM(BaseMatrix *subMat, char *pssm, const float *profile, float bitFactor, size_t queryLength, float scoreBias) {
     // Initialize fPssm
     float *fPssm = new float[queryLength * Sequence::PROFILE_AA_SIZE];
@@ -278,33 +288,106 @@ void PSSMCalculator::computeLogPSSM(BaseMatrix *subMat, char *pssm, const float 
             float pssmVal = 0.0f;
             switch (aa) {
                 case 16: // AX, average over all A* (C, G, L, Q)
-                    pssmVal = (fPssm[1] + fPssm[5] + fPssm[9] + fPssm[13]) / 4.0f;
+                    std::vector<size_t> indices = subMat->returnCanonicalIndices(aa);
+                    std::vector<float> probs;
+                    for (size_t i : indices) {
+                        probs.push_back(profile[pos * Sequence::PROFILE_AA_SIZE + aa]);
+                    }
+                    normalizeProbs(probs);
+                    pssmVal = 0.0f;
+                    for (size_t i = 0; i < probs.size(); i++) {
+                        pssmVal += probs[i] * profile[pos * Sequence::PROFILE_AA_SIZE + indices[i]] / subMat->pBack[indices[i]];
+                    }
                     break;
                 case 17: // CX, average over all C* (D, F, R, K)
-                    pssmVal = (fPssm[2] + fPssm[4] + fPssm[8] + fPssm[14]) / 4.0f;
+                    std::vector<size_t> indices = subMat->returnCanonicalIndices(aa);
+                    std::vector<float> probs;
+                    for (size_t i : indices) {
+                        probs.push_back(profile[pos * Sequence::PROFILE_AA_SIZE + aa]);
+                    }
+                    normalizeProbs(probs);
+                    pssmVal = 0.0f;
+                    for (size_t i = 0; i < probs.size(); i++) {
+                        pssmVal += probs[i] * profile[pos * Sequence::PROFILE_AA_SIZE + indices[i]] / subMat->pBack[indices[i]];
+                    }
                     break;
                 case 18: // GX, average over all G* (M, A, P, I)
-                    pssmVal = (fPssm[0] + fPssm[7] + fPssm[10] + fPssm[12]) / 4.0f;
+                    std::vector<size_t> indices = subMat->returnCanonicalIndices(aa);
+                    std::vector<float> probs;
+                    for (size_t i : indices) {
+                        probs.push_back(profile[pos * Sequence::PROFILE_AA_SIZE + aa]);
+                    }
+                    normalizeProbs(probs);
+                    pssmVal = 0.0f;
+                    for (size_t i = 0; i < probs.size(); i++) {
+                        pssmVal += probs[i] * profile[pos * Sequence::PROFILE_AA_SIZE + indices[i]] / subMat->pBack[indices[i]];
+                    }
                     break;
                 case 19: // UX, average over all U* (E, N, H, S)
-                    pssmVal = (fPssm[3] + fPssm[6] + fPssm[11] + fPssm[15]) / 4.0f;
+                    std::vector<size_t> indices = subMat->returnCanonicalIndices(aa);
+                    std::vector<float> probs;
+                    for (size_t i : indices) {
+                        probs.push_back(profile[pos * Sequence::PROFILE_AA_SIZE + aa]);
+                    }
+                    normalizeProbs(probs);
+                    pssmVal = 0.0f;
+                    for (size_t i = 0; i < probs.size(); i++) {
+                        pssmVal += probs[i] * profile[pos * Sequence::PROFILE_AA_SIZE + indices[i]] / subMat->pBack[indices[i]];
+                    }
                     break;
                 case 20: // XA, average over all *A (C, D, M, E)
-                    pssmVal = (fPssm[1] + fPssm[2] + fPssm[3] + fPssm[10]) / 4.0f;
+                    std::vector<size_t> indices = subMat->returnCanonicalIndices(aa);
+                    std::vector<float> probs;
+                    for (size_t i : indices) {
+                        probs.push_back(profile[pos * Sequence::PROFILE_AA_SIZE + aa]);
+                    }
+                    normalizeProbs(probs);
+                    pssmVal = 0.0f;
+                    for (size_t i = 0; i < probs.size(); i++) {
+                        pssmVal += probs[i] * profile[pos * Sequence::PROFILE_AA_SIZE + indices[i]] / subMat->pBack[indices[i]];
+                    }
                     break;
                 case 21: // XC, average over all *C (G, F, A, N)
-                    pssmVal = (fPssm[0] + fPssm[4] + fPssm[5] + fPssm[11]) / 4.0f;
+                    std::vector<size_t> indices = subMat->returnCanonicalIndices(aa);
+                    std::vector<float> probs;
+                    for (size_t i : indices) {
+                        probs.push_back(profile[pos * Sequence::PROFILE_AA_SIZE + aa]);
+                    }
+                    normalizeProbs(probs);
+                    pssmVal = 0.0f;
+                    for (size_t i = 0; i < probs.size(); i++) {
+                        pssmVal += probs[i] * profile[pos * Sequence::PROFILE_AA_SIZE + indices[i]] / subMat->pBack[indices[i]];
+                    }
                     break;
                 case 22: // XG, average over all *G (L, R, P, H)
-                    pssmVal = (fPssm[6] + fPssm[9] + fPssm[12] + fPssm[14]) / 4.0f;
+                    std::vector<size_t> indices = subMat->returnCanonicalIndices(aa);
+                    std::vector<float> probs;
+                    for (size_t i : indices) {
+                        probs.push_back(profile[pos * Sequence::PROFILE_AA_SIZE + aa]);
+                    }
+                    normalizeProbs(probs);
+                    pssmVal = 0.0f;
+                    for (size_t i = 0; i < probs.size(); i++) {
+                        pssmVal += probs[i] * profile[pos * Sequence::PROFILE_AA_SIZE + indices[i]] / subMat->pBack[indices[i]];
+                    }
                     break;
                 case 23: // XU, average over all *U (Q, K, I, S)
-                    pssmVal = (fPssm[7] + fPssm[8] + fPssm[13] + fPssm[15]) / 4.0f; 
+                    std::vector<size_t> indices = subMat->returnCanonicalIndices(aa);
+                    std::vector<float> probs;
+                    for (size_t i : indices) {
+                        probs.push_back(profile[pos * Sequence::PROFILE_AA_SIZE + aa]);
+                    }
+                    normalizeProbs(probs);
+                    pssmVal = 0.0f;
+                    for (size_t i = 0; i < probs.size(); i++) {
+                        pssmVal += probs[i] * profile[pos * Sequence::PROFILE_AA_SIZE + indices[i]] / subMat->pBack[indices[i]];
+                    }
                     break;
                 default: // should not happen
                     Debug(Debug::ERROR) << "Error in PSSMCalculator::computeLogPSSM: non-canonical dinucleotide index out of range: " << aa << "\n";
                     EXIT(EXIT_FAILURE);
             }
+            pssmVal = bitFactor * MathUtil::flog2(pssmVal) + bitFactor * scoreBias;
             pssmVal = static_cast<char>((pssmVal < 0.0) ? pssmVal - 0.5 : pssmVal + 0.5);
             float truncPssmVal =  std::min(pssmVal, 127.0f);
             truncPssmVal       =  std::max(-128.0f, truncPssmVal);
