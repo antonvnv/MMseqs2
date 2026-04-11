@@ -299,6 +299,20 @@ case "${SELECTION}" in
         push_back "${TMP_PATH}/kalamari.fasta"
         INPUT_TYPE="FASTA_LIST"
     ;;
+    "RNAcentral_current"|"RNAcentral_26_0")
+        case "${SELECTION}" in
+            "RNAcentral_current") RNACENTRAL_URL="https://ftp.ebi.ac.uk/pub/databases/RNAcentral/current_release/sequences/rnacentral_active.fasta.gz" ;;
+            "RNAcentral_26_0")    RNACENTRAL_URL="https://ftp.ebi.ac.uk/pub/databases/RNAcentral/releases/26.0/sequences/rnacentral_active.fasta.gz" ;;
+        esac
+        DL_DIR="${DOWNLOAD_DIR:-${TMP_PATH}}/${SELECTION}"
+        mkdir -p "${DL_DIR}"
+        if notExists "${DL_DIR}/rnacentral_active.fasta.gz"; then
+            downloadFile "${RNACENTRAL_URL}" "${DL_DIR}/rnacentral_active.fasta.gz"
+        fi
+        date "+%s" > "${TMP_PATH}/version"
+        push_back "${DL_DIR}/rnacentral_active.fasta.gz"
+        INPUT_TYPE="LOCAL_FASTA"
+    ;;
     *)
         if [ ! -f "${SELECTION}" ]; then
             fail "Local file not found: ${SELECTION}"
