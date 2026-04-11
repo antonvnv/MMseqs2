@@ -157,6 +157,20 @@ std::vector<DatabaseDownload> downloads = {{
                                                    "https://github.com/lskatz/Kalamari",
                                                    true, Parameters::DBTYPE_NUCLEOTIDES, databases_sh, databases_sh_len,
                                                    { }
+                                           }, {
+                                                   "RNAcentral_current",
+                                                   "RNAcentral active sequences (latest release). Non-deterministic: contents change with each release.",
+                                                   "RNAcentral Consortium: RNAcentral 2021: secondary structure integration, improved sequence search and new member databases. Nucleic Acids Res 49(D1), D212-D220 (2021)",
+                                                   "https://rnacentral.org",
+                                                   false, Parameters::DBTYPE_NUCLEOTIDES, databases_sh, databases_sh_len,
+                                                   { }
+                                           }, {
+                                                   "RNAcentral_26_0",
+                                                   "RNAcentral active sequences (release 26.0, deterministic).",
+                                                   "RNAcentral Consortium: RNAcentral 2021: secondary structure integration, improved sequence search and new member databases. Nucleic Acids Res 49(D1), D212-D220 (2021)",
+                                                   "https://rnacentral.org",
+                                                   false, Parameters::DBTYPE_NUCLEOTIDES, databases_sh, databases_sh_len,
+                                                   { }
                                            },
 };
 
