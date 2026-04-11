@@ -65,7 +65,7 @@ public:
     // Compute weight for sequence based on "Position-based Sequence Weights' (1994)
     static void computeSequenceWeights(float *seqWeight, size_t queryLength, size_t setSize, const char **msaSeqs);
 
-    static void normalizeProbs(const std::vector<float> &probs);
+    static void normalizeProbs(std::vector<float> &probs);
 
     // compute position-specific scoring matrix PSSM score
     // 1.) convert PFM to PPM (position probability matrix)
