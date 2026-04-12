@@ -338,7 +338,7 @@ void Alignment::run(const std::string &outDB, const std::string &outDBIndex, con
                     }
 
                     // if strand is reverse (0) or strand is both (2) and id is even, then we have to think of reverse complement
-                    bool reverse = (strand == 0) || (strand == 2 && id % 2 == 0);
+                    bool reverse = (strand == 0) || (strand == 2 && qId % 2 == 1);
 
                     qSeq.mapSequence(qId, queryDbKey, querySeqData, queryLen, remapProfile, m, reverse, forceCompBias, compBiasCorrectionScale);
                     matcher.initQuery(&qSeq);
