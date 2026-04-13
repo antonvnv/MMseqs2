@@ -2586,7 +2586,7 @@ void Parameters::setDefaults() {
     seqIdThr = 0.0;
     alnLenThr = 0;
     altAlignment = 0;
-    gapOpen = MultiParam<NuclAA<int>>(NuclAA<int>(22, 22));
+    gapOpen = MultiParam<NuclAA<int>>(NuclAA<int>(23, 23));
     gapExtend = MultiParam<NuclAA<int>>(NuclAA<int>(1, 1));
 #ifdef GAP_POS_SCORING
     gapPseudoCount = 10;
