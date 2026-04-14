@@ -289,7 +289,7 @@ void runFilterOnGpu(Parameters & par, BaseMatrix * subMat,
             char *querySeqData = qdbr->getData(id, 0);
 
             // if strand is reverse (0) or strand is both (2) and id is even, then we have to think of reverse complement
-            bool reverse = (par.strand == 0) || (par.strand == 2 && id % 2 == 1);
+            bool reverse = (par.strand == 0) || (par.strand == 2 && queryKey % 2 == 1);
 
             qSeq.mapSequence(id, queryKey, querySeqData, querySeqLen, par.remapProfile, subMat, reverse, par.forceCompBiasCorrection, par.compBiasCorrectionScale);
             if (Parameters::isEqualDbtype(querySeqType, Parameters::DBTYPE_HMM_PROFILE)) {
@@ -584,7 +584,7 @@ void runFilterOnCpu(Parameters & par, BaseMatrix * subMat, int8_t * tinySubMat,
             unsigned int querySeqLen = qdbr->getSeqLen(id);
 
             // if strand is reverse (0) or strand is both (2) and id is even, then we have to think of reverse complement
-            bool reverse = (par.strand == 0) || (par.strand == 2 && id % 2 == 1);
+            bool reverse = (par.strand == 0) || (par.strand == 2 && queryKey % 2 == 1);
 
             qSeq.mapSequence(id, queryKey, querySeqData, querySeqLen, par.remapProfile, subMat, reverse, par.forceCompBiasCorrection, par.compBiasCorrectionScale);
 //            qSeq.printProfileStatePSSM();
