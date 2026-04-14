@@ -195,49 +195,38 @@ void BaseMatrix::generateSubMatrix(double ** probMatrix, double ** subMatrix, fl
         for (int i = 16; i < size; i++) {
             // Get the indexes that has the same canonical nucleotides (i.e. "AA", "AC", "AG", "AU/T" for "AX", etc.)
             dinucs_row = returnCanonicalIndices(i);
-            std::vector<double> probsA, probsB;
             for (int j = 0; j < size; j++) {
                 dinucs_col.clear();
                 if (j > 15) {
                     dinucs_col = returnCanonicalIndices(j);
                 }
-                probsA.clear();
                 // If dinucs_col is empty
                 if (dinucs_col.size() == 0) {
                     // j <= 15
+                    double score_sum = 0.0;
                     for (size_t row_idx : dinucs_row) {
-                        // Save the pBack^2
-                        probsA.push_back(pBack[row_idx] * pBack[row_idx]);
+                        score_sum += subMatrix[row_idx][j];
                     }
-                    double numerator = 0.0, denominator = 0.0;
-                    for (size_t k = 0; k < probsA.size(); k++) {
-                        numerator += probsA[k] * std::exp(subMatrix[dinucs_row[k]][j]);
-                        denominator += probsA[k];
-                    }
-                    subMatrix[i][j] = std::log2(numerator / denominator);
+                    subMatrix[i][j] = score_sum / static_cast<double>(dinucs_row.size());
                     subMatrix[j][i] = subMatrix[i][j];
                 } else {
-                    double probsA_sum = 0.0, probsB_sum = 0.0;
+                    double score_sum = 0.0;
                     for (size_t row_idx : dinucs_row) {
-                        probsA.push_back(pBack[row_idx]);
-                        probsA_sum += pBack[row_idx];
-                    }
-                    probsB.clear();
-                    for (size_t col_idx : dinucs_col) {
-                        probsB.push_back(pBack[col_idx]);
-                        probsB_sum += pBack[col_idx];
-                    }
-                    double numerator = 0.0, denominator = probsA_sum * probsB_sum;
-                    for (size_t k = 0; k < probsA.size(); k++) {
-                        for (size_t l = 0; l < probsB.size(); l++) {
-                            numerator += probsA[k] * probsB[l] * std::exp(subMatrix[dinucs_row[k]][dinucs_col[l]]);
+                        for (size_t col_idx : dinucs_col) {
+                            score_sum += subMatrix[row_idx][col_idx];
                         }
                     }
-                    subMatrix[i][j] = std::log2(numerator / denominator);
+                    subMatrix[i][j] = score_sum / static_cast<double>(dinucs_row.size() * dinucs_col.size());
                     subMatrix[j][i] = subMatrix[i][j];
                 }
             }
         }
+        // zero out the last row and column
+        for (int i = 0; i < size; i++) {
+            subMatrix[i][size-1] = -1.0;
+            subMatrix[size-1][i] = -1.0;
+        }
+        subMatrix[size-1][size-1] = -1.0;
     }
 
     delete[] pBack;
