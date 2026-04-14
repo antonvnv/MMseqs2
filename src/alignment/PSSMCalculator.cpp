@@ -276,14 +276,35 @@ void PSSMCalculator::computeLogPSSM(BaseMatrix *subMat, char *pssm, const float 
         for(;aa < Sequence::PROFILE_AA_SIZE; aa++) {
             const unsigned int idx = pos * Sequence::PROFILE_AA_SIZE + aa;
             float pssmVal = 0.0f;
-            float backgroundProbsSum = 0.0f;
-            float profileProbsSum = 0.0f;
-            std::vector<size_t> indices = subMat->returnCanonicalIndices(aa);
-            for (size_t i : indices) {
-                backgroundProbsSum += subMat->pBack[i];
-                profileProbsSum += profile[pos * Sequence::PROFILE_AA_SIZE + i];
+            switch (aa) {
+                case 16: // AX, average over all A* (C, G, L, Q)
+                    pssmVal = (fPssm[1] + fPssm[5] + fPssm[9] + fPssm[13]) / 4.0f;
+                    break;
+                case 17: // CX, average over all C* (D, F, R, K)
+                    pssmVal = (fPssm[2] + fPssm[4] + fPssm[8] + fPssm[14]) / 4.0f;
+                    break;
+                case 18: // GX, average over all G* (M, A, P, I)
+                    pssmVal = (fPssm[0] + fPssm[7] + fPssm[10] + fPssm[12]) / 4.0f;
+                    break;
+                case 19: // UX, average over all U* (E, N, H, S)
+                    pssmVal = (fPssm[3] + fPssm[6] + fPssm[11] + fPssm[15]) / 4.0f;
+                    break;
+                case 20: // XA, average over all *A (C, D, M, E)
+                    pssmVal = (fPssm[1] + fPssm[2] + fPssm[3] + fPssm[10]) / 4.0f;
+                    break;
+                case 21: // XC, average over all *C (G, F, A, N)
+                    pssmVal = (fPssm[0] + fPssm[4] + fPssm[5] + fPssm[11]) / 4.0f;
+                    break;
+                case 22: // XG, average over all *G (L, R, P, H)
+                    pssmVal = (fPssm[6] + fPssm[9] + fPssm[12] + fPssm[14]) / 4.0f;
+                    break;
+                case 23: // XU, average over all *U (Q, K, I, S)
+                    pssmVal = (fPssm[7] + fPssm[8] + fPssm[13] + fPssm[15]) / 4.0f; 
+                    break;
+                default: // should not happen
+                    Debug(Debug::ERROR) << "Error in PSSMCalculator::computeLogPSSM: non-canonical dinucleotide index out of range: " << aa << "\n";
+                    EXIT(EXIT_FAILURE);
             }
-            pssmVal = bitFactor * MathUtil::flog2(profileProbsSum / backgroundProbsSum) + bitFactor * scoreBias;
             pssmVal = static_cast<char>((pssmVal < 0.0) ? pssmVal - 0.5 : pssmVal + 0.5);
             float truncPssmVal =  std::min(pssmVal, 127.0f);
             truncPssmVal       =  std::max(-128.0f, truncPssmVal);
