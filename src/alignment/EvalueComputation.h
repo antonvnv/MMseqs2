@@ -45,7 +45,7 @@ public:
     inline double computeEvalue(double score, double seqLength) {
         const double epa = evaluer.evaluePerArea( score );
         const double a = area( score, seqLength );
-        return epa * a / 170.0; // Correcting e-value
+        return 0.0382461572658595 * pow(epa * a, 0.8283631544068919); // Correcting e-value
     }
 
     inline double computeLogEvalue(double score, double seqLength) {
@@ -87,12 +87,12 @@ private:
                                                        4.5269915477182944841,  0,
                                                        4.5269915477182944841,  0,
                                                        4.5269915477182944841,  0}},
-                {"dinuc.out", 23, 1, true, {0.17414129, 36.543379,
-                                                       0.34599804304218373, -5.0840414143063768,
-                                                       0.34641169511449249, -5.1030694096325799,
-                                                       0.43354433498938222, -16.315737330152189,
-                                                       0.43416744115055067, -16.344400213565937,
-                                                       0.43312709202820643, -16.2965441539381}}
+                {"dinuc.out", 23, 1, true, {0.18542241, 36.332014,
+                                                       0.76221128839920349041, 0,
+                                                       0.76221128839920349041, 0,
+                                                       4.5269915477182944841,  0,
+                                                       4.5269915477182944841,  0,
+                                                       4.5269915477182944841,  0}}
         };
 
 
