@@ -1,0 +1,146 @@
+Regression analysis: old vs new branch of MMseqs2-pskvins-src
+=============================================================
+
+Query: URS0003421724 (590nt rRNA)
+Target DB: rnacentral_active (pre-indexed, 41M sequences)
+Test script: ./test_regression
+
+Results
+-------
+
+  Branch  MAX_SEQS  NUM_ITER  Hits   Median    Min      Max
+  old     500       3         9      99.15%    32.54%   100%
+  old     10000     3         9      99.15%    32.54%   100%
+  new     500       3         13     99.15%    0.17%    100%
+  new     10000     3         2732   9.66%     0.17%    100%
+  new     10000     1         31     27.97%    6.61%    100%
+
+The 8 hits at >=40% identity are stable across all runs — same set of true
+homologs in both branches. Everything below ~30% is new and suspect.
+
+Identity threshold breakdown (new, MAX_SEQS=10000, 3 iterations):
+
+  >=10%: 1302
+  >=20%: 139
+  >=30%: 12
+  >=40%: 8      <-- same 8 as old
+  >=50%: 8
+  >=60%: 8
+  >=70%: 8
+  >=80%: 8
+  >=90%: 8
+
+
+Conclusion: this is a regression
+--------------------------------
+
+The new branch does not find any additional real homologs. It only adds noise
+below ~30% sequence identity. The core set of 8 genuine hits (>=40%) is
+identical between old and new.
+
+
+Root cause: e-value formula is too permissive
+---------------------------------------------
+
+The NUM_ITER=1 diagnostic isolates the problem. With a single iteration (no
+profile drift), new already finds 31 hits vs old's 9. The 22 extra hits have
+6-27% identity — barely above random for nucleotide sequences (~25% expected
+by chance, lower with gaps and dinucleotide encoding). These are false
+positives that pass the new e-value threshold but were correctly rejected by
+the old formula.
+
+The e-value computation changed in three ways:
+
+1. Formula rewrite (EvalueComputation.h, computeEvalue):
+
+   Old: 0.0382461572658595 * pow(epa * a, 0.8283631544068919)
+   New: epa * a / 170.0
+
+   The old power-law dampening (exponent 0.83) compresses large epa*a
+   products sublinearly. This makes it progressively harder for weak hits to
+   reach the e-value threshold. The new linear formula (divide by 170) does
+   not have this dampening, so weak hits that produce large area*epa products
+   now pass the threshold more easily.
+
+2. Karlin-Altschul statistical parameters (EvalueComputation.h):
+
+   Old: lambda=0.18542241, K=36.332014, all higher-order corrections = 0
+   New: lambda=0.17414129, K=36.543379, non-zero corrections (-5.08, -16.3, etc.)
+
+   The lower lambda shifts the score-to-evalue mapping. The non-zero
+   higher-order corrections change the finite-size adjustment.
+
+3. dbResCount doubling moved (EvalueComputation.h, constructor):
+
+   Old: dbResCount passed as-is to constructor; area doubled at compute time
+        via (bothStrands ? 2 : 1)
+   New: dbResCount *= 2 in constructor when bothStrands; area not doubled at
+        compute time
+
+   This changes how the effective database size propagates through the
+   underlying Karlin-Altschul statistics (evaluer object), not just the
+   final multiplication.
+
+
+Profile drift amplifies the problem
+------------------------------------
+
+With 3 iterations and large MAX_SEQS, the false positives from iteration 1
+contaminate the PSSM profile:
+
+  Iteration 1: 31 hits (22 false positives at 6-27% identity)
+  Profile built from these 31 sequences is now broader/noisier
+  Iteration 2: broader profile finds more distant (unrelated) sequences
+  Iteration 3: snowball continues → 2732 hits, median 9.66%
+
+This explains why MAX_SEQS matters so much for new but not old:
+- Old finds 9 hits in iteration 1 (all genuine), profile stays clean,
+  iterations 2-3 find nothing new → stable at 9 regardless of MAX_SEQS.
+- New finds 31 hits in iteration 1, including false positives. With
+  MAX_SEQS=500, the prefilter cap limits the snowball (13 final hits).
+  With MAX_SEQS=10000, the cap is high enough to let the snowball run
+  unchecked (2732 final hits).
+
+
+Other changes between old and new (contributing factors)
+--------------------------------------------------------
+
+- Gap open penalty: 23 → 22 (slightly favors gapped alignments)
+
+- Background frequencies in dinuc.out: recomputed, shifts substitution scores
+
+- PSSM calculation for ambiguous dinucleotides (PSSMCalculator.cpp):
+  Old: hardcoded arithmetic average of constituent dinucleotide scores
+  New: probability-weighted log-odds using background frequencies from
+       BaseMatrix::returnCanonicalIndices()
+
+- Sub-matrix scores for ambiguous dinucleotides (BaseMatrix.cpp):
+  Old: arithmetic average of sub-matrix scores
+  New: log of probability-weighted exponential sum (proper geometric mean
+       in log-odds space)
+
+- Reverse strand detection (Alignment.cpp, ungappedprefilter.cpp):
+  Old: parsed Orf header to determine strand
+  New: uses modulo of sequence index (id % 2 == 1 → reverse)
+  This is a bug fix (commit 36cb673f), unrelated to the e-value issue.
+
+The PSSM and sub-matrix changes are mathematically more principled but may
+also contribute to the increased sensitivity by changing how profile scores
+are computed for ambiguous positions.
+
+
+Suggested investigation
+-----------------------
+
+1. Recalibrate the e-value constant. The /170.0 divisor is too permissive.
+   Either increase it or reintroduce some form of sublinear dampening.
+
+2. Alternatively, check if the new Karlin-Altschul parameters (lambda, K,
+   corrections) were fitted on a representative RNA benchmark. If they were
+   fitted on protein data or a different matrix, the calibration may be off
+   for the dinucleotide substitution matrix.
+
+3. As a quick validation: manually inspect 5-10 of the new iteration-1 hits
+   in the 10-27% identity range. Check them against Rfam or by structural
+   alignment. If none are real homologs, the e-value is definitively too
+   permissive.

@@ -1,0 +1,89 @@
+#!/bin/bash
+# Regression test: search a query FASTA against pre-indexed rnacentral_active.
+# Demonstrates the e-value snowball regression on the 'new' branch.
+#
+# Usage: ./test_regression
+#        QUERY_FASTA=data/URS000149A9AF.fasta ./test_regression
+#
+# Prerequisites:
+#   - Build mmseqs: cd .. && mkdir -p build && cd build && cmake .. -DENABLE_CUDA=1 -DHAVE_AVX2=1 \
+#       -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" -DCMAKE_BUILD_TYPE=Release && make -j$(nproc)
+#   - Pre-indexed rnacentral_active database (set TARGET_DB env var)
+#
+# Expected result on 'new' branch (broken e-value formula):
+#   URS0003421724: ~2700 hits, median ~10% identity (snowball regression)
+# Expected result on 'old' branch (correct formula):
+#   URS0003421724: 9 hits, median ~99% identity
+set -x -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+MMSEQS=${MMSEQS:-$REPO_ROOT/build/src/mmseqs}
+GPU=${GPU:-1}
+GPU_SERVER=${GPU_SERVER:-0}
+THREADS=${THREADS:-64}
+MAX_SEQS=${MAX_SEQS:-10000}
+NUM_ITER=${NUM_ITER:-3}
+
+TARGET_DB=${TARGET_DB:-$SCRIPT_DIR/../../rnacentral_active/db}
+QUERY_FASTA=${QUERY_FASTA:-$SCRIPT_DIR/URS0003421724.fasta}
+QUERY_NAME=$(basename "$QUERY_FASTA" .fasta)
+
+# Determine commit for results directory
+COMMIT=$(cd "$REPO_ROOT" && git rev-parse --short HEAD)
+
+RESULTS_DIR=$SCRIPT_DIR/results/${COMMIT}_maxseqs_${MAX_SEQS}_numiter_${NUM_ITER}/${QUERY_NAME}
+
+# Build if needed
+if [ ! -x "$MMSEQS" ]; then
+    mkdir -p "$REPO_ROOT/build"
+    pushd "$REPO_ROOT/build"
+    cmake -DHAVE_MPI=0 \
+          -DENABLE_CUDA=1 \
+          -DHAVE_TESTS=1 \
+          -DHAVE_AVX2=1 \
+          -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=. \
+          ..
+    popd
+fi
+pushd "$REPO_ROOT/build"
+make -j64
+popd
+
+WORKDIR=$(mktemp -d "$SCRIPT_DIR/test_regression.XXXXXX")
+trap "rm -rf $WORKDIR" EXIT
+
+pushd "$WORKDIR"
+
+# Build query DB
+$MMSEQS createdb "$QUERY_FASTA" query_db --threads $THREADS
+
+# Search against pre-indexed target
+$MMSEQS search query_db "$TARGET_DB" result_db tmp \
+    --num-iterations $NUM_ITER \
+    -e 0.1 \
+    -a \
+    --max-seqs $MAX_SEQS \
+    --prefilter-mode 1 \
+    --db-load-mode 2 \
+    --gpu $GPU \
+    --gpu-server $GPU_SERVER \
+    --split 1 \
+    --threads $THREADS
+
+# Convert to a3m
+$MMSEQS result2msa query_db "$TARGET_DB" result_db result.a3m \
+    --msa-format-mode 6 \
+    --filter-msa 1 --filter-min-enable 1000 --diff 3000 \
+    --qid 0.0,0.2,0.4,0.6,0.8,1.0 --max-seq-id 0.95 \
+    --threads $THREADS
+
+# Save results
+mkdir -p "$RESULTS_DIR"
+cp result.a3m "$RESULTS_DIR/result.a3m"
+python3 "$SCRIPT_DIR/seq_identity.py" result.a3m | tee "$RESULTS_DIR/stats.txt"
+
+popd
