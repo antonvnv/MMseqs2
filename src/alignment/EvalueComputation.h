@@ -45,7 +45,7 @@ public:
     inline double computeEvalue(double score, double seqLength) {
         const double epa = evaluer.evaluePerArea( score );
         const double a = area( score, seqLength );
-        return epa * a / 170.0; // Correcting e-value
+        return 30.0 * pow(epa * a, 0.83); // Sublinear correction for dinucleotide matrix
     }
 
     inline double computeLogEvalue(double score, double seqLength) {
