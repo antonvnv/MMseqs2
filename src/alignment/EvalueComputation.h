@@ -10,17 +10,9 @@
 class EvalueComputation {
 public:
     EvalueComputation(size_t dbResCount, BaseMatrix *subMat, bool bothStrands=true) : dbResCount(dbResCount), bothStrands(bothStrands) {
-        if (bothStrands) {
-            // double the number of results for the reverse complement
-            dbResCount *= 2;
-        }
         init(subMat, 0, 0, false);
     }
     EvalueComputation(size_t dbResCount, BaseMatrix *subMat, int gapOpen, int gapExtend, bool bothStrands=true) : dbResCount(dbResCount), bothStrands(bothStrands) {
-        if (bothStrands) {
-            // double the number of results for the reverse complement
-            dbResCount *= 2;
-        }
         init(subMat, gapOpen, gapExtend, true);
     }
 
@@ -44,7 +36,7 @@ public:
 
     inline double computeEvalue(double score, double seqLength) {
         const double epa = evaluer.evaluePerArea( score );
-        const double a = area( score, seqLength );
+        const double a = area( score, seqLength ) * (bothStrands ? 2 : 1);
         return 0.0382461572658595 * pow(epa * a, 0.8283631544068919); // Correcting e-value
     }
 
