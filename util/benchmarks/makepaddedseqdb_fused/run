@@ -1,0 +1,285 @@
+#!/usr/bin/env python3
+"""
+Benchmark & correctness suite for the fused makepaddedseqdb FASTA codepath.
+
+Usage:
+    cd util/benchmarks/makepaddedseqdb_fused
+    ./run                    # auto-detect mmseqs from build/src/mmseqs
+    ./run /path/to/mmseqs    # use a specific binary
+"""
+
+import filecmp
+import os
+import resource
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+
+CORRECTNESS_SIZES = ["1M", "10M", "50M", "100M"]
+BENCH_SIZES = ["1M", "10M", "50M", "100M", "500M"]
+EXTENSIONS = ["", ".index", ".dbtype", "_h", "_h.index", ".lookup"]
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def find_mmseqs(argv):
+    """Resolve the mmseqs binary path."""
+    if len(argv) >= 2:
+        p = os.path.realpath(argv[1])
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+        sys.exit(f"Error: {argv[1]} is not an executable")
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.normpath(os.path.join(script_dir, "../../.."))
+    default = os.path.join(repo_root, "build", "src", "mmseqs")
+    if os.path.isfile(default) and os.access(default, os.X_OK):
+        return default
+    sys.exit(
+        f"mmseqs not found at {default}\n"
+        "Build first (cd build && make -j) or pass the path: ./run /path/to/mmseqs"
+    )
+
+
+def run_cmd(args, **kwargs):
+    """Run a command silently, raising on failure."""
+    subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                   check=True, **kwargs)
+
+
+def measure(args):
+    """Run *args* in a child process; return (wall_seconds, peak_rss_kb)."""
+    # Reset the children-RSS high-water mark by forking a fresh helper process.
+    # Python's resource.RUSAGE_CHILDREN tracks the *max* across all waited-for
+    # children in this process, so we delegate to a tiny subprocess that runs
+    # the real command and reports its own RUSAGE_CHILDREN.
+    helper = [
+        sys.executable, "-c",
+        "import resource,subprocess,sys,time;"
+        "s=time.monotonic();"
+        "p=subprocess.run(sys.argv[1:],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);"
+        "e=time.monotonic()-s;"
+        "r=resource.getrusage(resource.RUSAGE_CHILDREN);"
+        f"print(e,int(r.ru_maxrss));"
+        "sys.exit(p.returncode)",
+    ] + list(args)
+    result = subprocess.run(helper, capture_output=True, text=True, check=True)
+    parts = result.stdout.strip().split()
+    return float(parts[0]), int(parts[1])
+
+
+def gen_fasta(gen_script, size, output):
+    """Generate a synthetic FASTA file."""
+    subprocess.run(
+        [sys.executable, gen_script, "--size", size, "-o", output],
+        check=True, stderr=subprocess.DEVNULL,
+    )
+
+
+def files_identical(a, b):
+    """True if two files are byte-for-byte identical."""
+    return filecmp.cmp(a, b, shallow=False)
+
+
+def fmt_mb(kb):
+    return f"{kb / 1024:.1f} MB"
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def main():
+    mmseqs = find_mmseqs(sys.argv)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    gen_script = os.path.join(script_dir, "gen_fasta.py")
+
+    print(f"Using mmseqs: {mmseqs}")
+    print()
+
+    tmpdir = tempfile.mkdtemp(prefix="bench_fused_")
+    print(f"Working directory: {tmpdir}")
+    print()
+
+    try:
+        _run(mmseqs, gen_script, tmpdir)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _run(mmseqs, gen_script, tmpdir):
+    # ── Generate FASTA files ──────────────────────────────────────────────
+    all_sizes = sorted(set(CORRECTNESS_SIZES + BENCH_SIZES),
+                       key=lambda s: _parse_size(s))
+
+    print("========================================")
+    print("  Generating test FASTA files")
+    print("========================================")
+    fasta_paths = {}
+    for size in all_sizes:
+        path = os.path.join(tmpdir, f"test_{size}.fasta")
+        gen_fasta(gen_script, size, path)
+        fasta_paths[size] = path
+        mb = os.path.getsize(path) / 1024**2
+        print(f"  {size:>6s}  {mb:8.1f} MB")
+    print()
+
+    # ── Correctness ───────────────────────────────────────────────────────
+    print("========================================")
+    print("  Correctness: fused vs 3-step reference")
+    print("========================================")
+    print()
+
+    total_checks = 0
+    total_pass = 0
+    all_correct = True
+
+    for size in CORRECTNESS_SIZES:
+        fasta = fasta_paths[size]
+        ref = os.path.join(tmpdir, f"ref_{size}")
+        fused = os.path.join(tmpdir, f"fused_{size}")
+
+        # Reference 3-step pipeline
+        run_cmd([mmseqs, "createdb", fasta, f"{ref}_db",
+                 "--dbtype", "2", "--shuffle", "1", "--threads", "1"])
+        run_cmd([mmseqs, "splitsequence", f"{ref}_db", f"{ref}_split",
+                 "--max-seq-len", "10000", "--sequence-overlap", "0", "--threads", "1"])
+        run_cmd([mmseqs, "makepaddedseqdb", f"{ref}_split", f"{ref}_padded",
+                 "--threads", "1"])
+
+        # Fused codepath
+        run_cmd([mmseqs, "makepaddedseqdb", fasta, f"{fused}_padded",
+                 "--max-seq-len", "10000", "--threads", "1"])
+
+        size_ok = True
+        mismatches = []
+        for ext in EXTENSIONS:
+            total_checks += 1
+            rp = f"{ref}_padded{ext}"
+            fp = f"{fused}_padded{ext}"
+            if os.path.isfile(rp) and os.path.isfile(fp) and files_identical(rp, fp):
+                total_pass += 1
+            else:
+                size_ok = False
+                all_correct = False
+                mismatches.append(ext if ext else "(data)")
+
+        status = "PASS" if size_ok else "FAIL"
+        detail = f"all {len(EXTENSIONS)} files match" if size_ok else f"mismatches: {', '.join(mismatches)}"
+        print(f"  {size:>6s}  {status}  ({detail})")
+
+        # Clean intermediates
+        for prefix in (ref, fused):
+            for f in _glob_prefix(prefix):
+                os.remove(f)
+
+    print()
+    if all_correct:
+        print(f"  Result: ALL PASSED ({total_pass}/{total_checks} file comparisons)")
+    else:
+        print(f"  Result: FAILURES detected ({total_pass}/{total_checks} passed)")
+        print()
+        print("  Aborting -- correctness must pass before benchmarking.")
+        sys.exit(1)
+    print()
+
+    # ── Performance benchmarks ────────────────────────────────────────────
+    print("========================================")
+    print("  Performance: fused vs reference")
+    print("========================================")
+    print()
+
+    rows = []  # list of (size, fused_time, fused_rss, ref_time, ref_rss)
+
+    for size in BENCH_SIZES:
+        fasta = fasta_paths[size]
+        ref = os.path.join(tmpdir, f"perf_ref_{size}")
+        fused = os.path.join(tmpdir, f"perf_fused_{size}")
+
+        # Fused
+        ft, fr = measure([mmseqs, "makepaddedseqdb", fasta, f"{fused}_padded",
+                          "--max-seq-len", "10000", "--threads", "1"])
+
+        # Reference (only measure the makepaddedseqdb step)
+        run_cmd([mmseqs, "createdb", fasta, f"{ref}_db",
+                 "--dbtype", "2", "--shuffle", "1", "--threads", "1"])
+        run_cmd([mmseqs, "splitsequence", f"{ref}_db", f"{ref}_split",
+                 "--max-seq-len", "10000", "--sequence-overlap", "0", "--threads", "1"])
+        rt, rr = measure([mmseqs, "makepaddedseqdb", f"{ref}_split", f"{ref}_padded",
+                          "--threads", "1"])
+
+        rows.append((size, ft, fr, rt, rr))
+
+        # Clean
+        for prefix in (ref, fused):
+            for f in _glob_prefix(prefix):
+                os.remove(f)
+
+    # ── Wall-time table ───────────────────────────────────────────────────
+    print("--- Wall-time (seconds) ---")
+    print()
+    print(f"  {'SIZE':8s}  {'FUSED':>10s}  {'REF(DB)':>10s}  {'RATIO':>10s}")
+    print(f"  {'--------':8s}  {'----------':>10s}  {'----------':>10s}  {'----------':>10s}")
+    for size, ft, fr, rt, rr in rows:
+        ratio = f"{ft / rt:.2f}x" if rt > 0 else "n/a"
+        print(f"  {size:8s}  {ft:9.3f}s  {rt:9.3f}s  {ratio:>10s}")
+    print()
+
+    # ── Peak-RSS table ────────────────────────────────────────────────────
+    print("--- Peak RSS (KB) ---")
+    print()
+    print(f"  {'SIZE':8s}  {'FUSED':>10s}  {'REF(DB)':>10s}  {'RATIO':>10s}")
+    print(f"  {'--------':8s}  {'----------':>10s}  {'----------':>10s}  {'----------':>10s}")
+    for size, ft, fr, rt, rr in rows:
+        ratio = f"{fr / rr:.2f}x" if rr > 0 else "n/a"
+        print(f"  {size:8s}  {fr:>10d}  {rr:>10d}  {ratio:>10s}")
+    print()
+
+    # ── Combined summary ──────────────────────────────────────────────────
+    print("--- Combined summary ---")
+    print()
+    hdr = (f"  {'SIZE':8s}  | {'FUSED (time / RSS)':>21s}"
+           f"  | {'REF (time / RSS)':>21s}"
+           f"  | {'TIME RATIO':>10s}  | {'RSS RATIO':>10s}")
+    sep = (f"  {'--------':8s}  | {'---------------------':>21s}"
+           f"  | {'---------------------':>21s}"
+           f"  | {'----------':>10s}  | {'----------':>10s}")
+    print(hdr)
+    print(sep)
+    for size, ft, fr, rt, rr in rows:
+        t_ratio = f"{ft / rt:.2f}x" if rt > 0 else "n/a"
+        r_ratio = f"{fr / rr:.2f}x" if rr > 0 else "n/a"
+        fr_mb = fmt_mb(fr)
+        rr_mb = fmt_mb(rr)
+        print(f"  {size:8s}  | {ft:8.3f}s / {fr_mb:>8s}"
+              f"  | {rt:8.3f}s / {rr_mb:>8s}"
+              f"  | {t_ratio:>10s}  | {r_ratio:>10s}")
+    print()
+    print("Done.")
+
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+
+def _parse_size(s):
+    """'10M' -> 10_485_760 (for sorting only)."""
+    s = s.strip().upper()
+    m = {'B': 1, 'K': 1024, 'M': 1024**2, 'G': 1024**3, 'T': 1024**4}
+    if s[-1] in m:
+        return int(float(s[:-1]) * m[s[-1]])
+    return int(s)
+
+
+def _glob_prefix(prefix):
+    """Yield all files whose path starts with *prefix*."""
+    d = os.path.dirname(prefix)
+    base = os.path.basename(prefix)
+    if not os.path.isdir(d):
+        return
+    for name in os.listdir(d):
+        if name.startswith(base):
+            yield os.path.join(d, name)
+
+
+if __name__ == "__main__":
+    main()
