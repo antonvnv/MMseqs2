@@ -4,6 +4,7 @@
 #include "ExtendedSubstitutionMatrix.h"
 #include "FileUtil.h"
 #include "IndexBuilder.h"
+#include "Masker.h"
 #include "Parameters.h"
 
 extern const char* index_version_compatible;
@@ -47,6 +48,92 @@ std::string PrefilteringIndexReader::indexName(const std::string &outDB) {
     std::string result(outDB);
     result.append(".idx");
     return result;
+}
+
+// Stream SequenceLookup data directly to the index file without the
+// O(totalSeqBytes) heap allocation that IndexBuilder::fillDatabase uses.
+// Encodes + masks each sequence and writes via DBWriter streaming API.
+// Produces byte-identical output to the bulk-allocation path.
+static void streamSequenceLookupToIndex(DBWriter &writer, unsigned int splitIdx, unsigned int keyOffset,
+                                        DBReader<unsigned int> *dbr, size_t dbFrom, size_t dbSize,
+                                        BaseMatrix *subMat, int seqType, int maxSeqLen, int kmerSize,
+                                        bool hasSpacedKmer, const std::string &spacedKmerPattern,
+                                        int maskMode, int maskLowerCase, float maskProb, int maskNrepeats,
+                                        int targetSearchMode) {
+    Debug(Debug::INFO) << "Streaming SequenceLookup to index (no bulk allocation)\n";
+
+    const bool isProfile = Parameters::isEqualDbtype(seqType, Parameters::DBTYPE_HMM_PROFILE);
+    const bool isTargetSimiliarKmerSearch = isProfile || targetSearchMode;
+
+    // Compute offsets and total data size from DB sequence lengths
+    size_t aaDbSize = 0;
+    size_t *offsets = new size_t[dbSize + 1];
+    offsets[0] = 0;
+    for (size_t id = dbFrom; id < dbFrom + dbSize; id++) {
+        size_t idLocal = id - dbFrom;
+        aaDbSize += dbr->getSeqLen(id);
+        offsets[idLocal + 1] = offsets[idLocal] + dbr->getSeqLen(id);
+    }
+
+    // SEQCOUNT
+    Debug(Debug::INFO) << "Write SEQCOUNT (" << (keyOffset + PrefilteringIndexReader::SEQCOUNT) << ")\n";
+    size_t tablesize = dbSize;
+    writer.writeData((char *) &tablesize, 1 * sizeof(size_t), keyOffset + PrefilteringIndexReader::SEQCOUNT, splitIdx);
+    writer.alignToPageSize(splitIdx);
+
+    // SEQINDEXDATASIZE
+    Debug(Debug::INFO) << "Write SEQINDEXDATASIZE (" << (keyOffset + PrefilteringIndexReader::SEQINDEXDATASIZE) << ")\n";
+    int64_t seqindexDataSize = (int64_t) aaDbSize;
+    writer.writeData((char *) &seqindexDataSize, 1 * sizeof(int64_t), keyOffset + PrefilteringIndexReader::SEQINDEXDATASIZE, splitIdx);
+    writer.alignToPageSize(splitIdx);
+
+    // SEQINDEXSEQOFFSET
+    Debug(Debug::INFO) << "Write SEQINDEXSEQOFFSET (" << (keyOffset + PrefilteringIndexReader::SEQINDEXSEQOFFSET) << ")\n";
+    writer.writeData((char *) offsets, (dbSize + 1) * sizeof(size_t), keyOffset + PrefilteringIndexReader::SEQINDEXSEQOFFSET, splitIdx);
+    writer.alignToPageSize(splitIdx);
+    delete[] offsets;
+
+    // Stream SEQINDEXDATA: encode + mask each sequence and write directly
+    Debug(Debug::INFO) << "Write SEQINDEXDATA (" << (keyOffset + PrefilteringIndexReader::SEQINDEXDATA) << ") [streaming]\n";
+
+    bool needMasking = !isTargetSimiliarKmerSearch && (maskMode > 0 || maskNrepeats > 0 || maskLowerCase > 0);
+    Masker *masker = NULL;
+    if (needMasking) {
+        masker = new Masker(*subMat);
+    }
+
+    // Match fillDatabase's thread-local Sequence parameters (aaBiasCorrection=false)
+    Sequence seq(maxSeqLen, seqType, subMat, kmerSize, hasSpacedKmer, false, true, spacedKmerPattern);
+
+    Debug::Progress progress(dbSize);
+    writer.writeStart(splitIdx);
+    for (size_t id = dbFrom; id < dbFrom + dbSize; id++) {
+        progress.updateProgress();
+        seq.resetCurrPos();
+        char *seqData = dbr->getData(id, 0);
+        unsigned int qKey = dbr->getDbKey(id);
+        seq.mapSequence(id - dbFrom, qKey, seqData, dbr->getSeqLen(id));
+
+        if (isTargetSimiliarKmerSearch) {
+            unsigned char *seqToWrite = isProfile ? seq.numConsensusSequence : seq.numSequence;
+            writer.writeAdd((const char *) seqToWrite, seq.L, splitIdx);
+        } else {
+            if (masker != NULL) {
+                masker->maskSequence(seq, maskMode > 0, maskProb, maskLowerCase > 0, maskNrepeats);
+            }
+            writer.writeAdd((const char *) seq.numSequence, seq.L, splitIdx);
+        }
+    }
+    // Sentinel byte to match original SequenceLookup buffer layout (dataSize+1 allocation)
+    char sentinel = '\0';
+    writer.writeAdd(&sentinel, 1, splitIdx);
+    writer.writeEnd(keyOffset + PrefilteringIndexReader::SEQINDEXDATA, splitIdx, true, true);
+    writer.alignToPageSize(splitIdx);
+
+    if (masker != NULL) {
+        delete masker;
+    }
+    dbr->remapData();
 }
 
 void PrefilteringIndexReader::createIndexFile(const std::string &outDB,
@@ -222,6 +309,19 @@ void PrefilteringIndexReader::createIndexFile(const std::string &outDB,
         size_t dbSize = 0;
         dbr1->decomposeDomainByAminoAcid(s, splits, &dbFrom, &dbSize);
         if (dbSize == 0) {
+            continue;
+        }
+
+        // When only SequenceLookup is needed (no k-mer index), stream it directly
+        // to disk without the O(totalSeqBytes) heap allocation.
+        // Use --index-subset 18 (2|16) to force the old bulk-allocation path.
+        const bool noStream = (indexSubset & Parameters::INDEX_SUBSET_NO_STREAM) != 0;
+        if (needSequenceLookup && !needKmerIndex && !noStream) {
+            unsigned int keyOffset = 1000 * s;
+            streamSequenceLookupToIndex(writer, SPLIT_INDX + s, keyOffset,
+                                        dbr1, dbFrom, dbSize, subMat, seqType, maxSeqLen, kmerSize,
+                                        hasSpacedKmer, spacedKmerPattern, maskMode, maskLowerCase,
+                                        maskProb, maskNrepeats, targetSearchMode);
             continue;
         }
 
