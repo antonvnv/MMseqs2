@@ -398,6 +398,8 @@ static int makepaddedseqdbFromFasta(Parameters &par) {
 
 int makepaddedseqdb(int argc, const char **argv, const Command &command) {
     Parameters &par = Parameters::getInstance();
+    // Match splitsequence defaults so fused FASTA path behaves identically
+    par.maxSeqLen = 10000;
     par.parseParameters(argc, argv, command, true, 0, 0);
 
     // Detect FASTA input: if no .dbtype file exists, run fused FASTA codepath
