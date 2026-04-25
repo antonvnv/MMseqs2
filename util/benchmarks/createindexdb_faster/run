@@ -94,12 +94,10 @@ def read_meminfo():
 
 
 def measure(args):
-    """Run *args*; return (wall_seconds, peak_mem_kb).
+    """Run *args*; return (wall_seconds, peak_mem_kb, cpu_percent).
 
-    Peak memory is measured as the drop in system MemAvailable during the
-    command, which captures process heap, mmap'd file pages, page cache
-    from writes, and kernel buffers — unlike per-process RSS which misses
-    mmap'd pages attributed to kernel page cache.
+    Uses fork/exec/wait4 to get rusage (user+sys CPU time), and polls
+    /proc/meminfo for system-level peak memory (MemAvailable drop).
     """
     import threading, time as _time
 
@@ -120,16 +118,35 @@ def measure(args):
 
     poller = threading.Thread(target=poll, daemon=True)
     poller.start()
+
     t0 = _time.monotonic()
-    subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-    elapsed = _time.monotonic() - t0
+    pid = os.fork()
+    if pid == 0:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+        os.close(devnull)
+        try:
+            os.execvp(args[0], args)
+        except OSError:
+            os._exit(127)
+    else:
+        _, status, rusage = os.wait4(pid, 0)
+        elapsed = _time.monotonic() - t0
+        exit_code = os.waitstatus_to_exitcode(status)
+        if exit_code != 0:
+            raise subprocess.CalledProcessError(exit_code, args)
+
     stop.set()
     poller.join()
+
+    cpu_s = rusage.ru_utime + rusage.ru_stime
+    cpu_pct = round(100 * cpu_s / elapsed, 1) if elapsed > 0 else 0
 
     peak_mem_kb = mem_avail_before - min_avail
     if peak_mem_kb < 0:
         peak_mem_kb = 0
-    return elapsed, peak_mem_kb
+    return elapsed, peak_mem_kb, cpu_pct
 
 
 def drop_page_cache_for_prefix(prefix):
@@ -422,14 +439,16 @@ def _run(mmseqs, gen_script, tmpdir, correctness_sizes, bench_sizes):
     #   Streaming:  --index-subset 2  (new streaming path, no bulk allocation)
     #   Bulk alloc: --index-subset 18 (2|16: bulk SequenceLookup via fillDatabase)
     #
-    # Both use --split 1 and --threads 1 for consistency.
+    # Both use --split 1 and all available threads.
+
+    threads = str(os.cpu_count())
 
     print("========================================")
-    print("  Performance: streaming vs bulk-allocation")
+    print(f"  Performance: streaming vs bulk-allocation (threads={threads})")
     print("========================================")
     print()
 
-    rows = []  # (size, stream_time, stream_mem, bulk_time, bulk_mem)
+    rows = []  # (size, stream_time, stream_mem, stream_cpu, bulk_time, bulk_mem, bulk_cpu)
 
     for size in bench_sizes:
         paddb = paddb_paths[size]
@@ -440,28 +459,28 @@ def _run(mmseqs, gen_script, tmpdir, correctness_sizes, bench_sizes):
         drop_page_cache_for_prefix(paddb)
 
         # Streaming path (--index-subset 2)
-        st, sm = measure([mmseqs, "createindex", paddb, perf_tmp,
-                          "--threads", "1", "--index-subset", "2", "--split", "1"])
+        st, sm, sc = measure([mmseqs, "createindex", paddb, perf_tmp,
+                              "--threads", threads, "--index-subset", "2", "--split", "1"])
         remove_idx_files(paddb)
 
         # Drop page cache again for fair comparison
         drop_page_cache_for_prefix(paddb)
 
         # Bulk allocation path (--index-subset 18: 2|16, no streaming)
-        bt, bm = measure([mmseqs, "createindex", paddb, perf_tmp,
-                          "--threads", "1", "--index-subset", "18", "--split", "1"])
+        bt, bm, bc = measure([mmseqs, "createindex", paddb, perf_tmp,
+                              "--threads", threads, "--index-subset", "18", "--split", "1"])
         remove_idx_files(paddb)
 
-        rows.append((size, st, sm, bt, bm))
+        rows.append((size, st, sm, sc, bt, bm, bc))
 
-    # ── Wall-time table ───────────────────────────────────────────────────
-    print("--- Wall-time (seconds) ---")
+    # ── Wall-time + CPU% table ────────────────────────────────────────────
+    print("--- Wall-time / CPU% ---")
     print()
-    print(f"  {'SIZE':8s}  {'STREAMING':>10s}  {'BULK-ALLOC':>12s}  {'RATIO':>10s}")
-    print(f"  {'--------':8s}  {'----------':>10s}  {'------------':>12s}  {'----------':>10s}")
-    for size, st, sm, bt, bm in rows:
+    print(f"  {'SIZE':8s}  {'STREAMING':>16s}  {'BULK-ALLOC':>16s}  {'TIME RATIO':>10s}")
+    print(f"  {'--------':8s}  {'----------------':>16s}  {'----------------':>16s}  {'----------':>10s}")
+    for size, st, sm, sc, bt, bm, bc in rows:
         ratio = f"{st / bt:.2f}x" if bt > 0 else "n/a"
-        print(f"  {size:8s}  {st:9.3f}s  {bt:11.3f}s  {ratio:>10s}")
+        print(f"  {size:8s}  {st:7.3f}s {sc:6.1f}%  {bt:7.3f}s {bc:6.1f}%  {ratio:>10s}")
     print()
 
     # ── Peak memory table ─────────────────────────────────────────────────
@@ -469,7 +488,7 @@ def _run(mmseqs, gen_script, tmpdir, correctness_sizes, bench_sizes):
     print()
     print(f"  {'SIZE':8s}  {'STREAMING':>10s}  {'BULK-ALLOC':>12s}  {'RATIO':>10s}")
     print(f"  {'--------':8s}  {'----------':>10s}  {'------------':>12s}  {'----------':>10s}")
-    for size, st, sm, bt, bm in rows:
+    for size, st, sm, sc, bt, bm, bc in rows:
         ratio = f"{sm / bm:.2f}x" if bm > 0 else "n/a"
         s_str = fmt_mem(sm)
         b_str = fmt_mem(bm)
@@ -479,21 +498,21 @@ def _run(mmseqs, gen_script, tmpdir, correctness_sizes, bench_sizes):
     # ── Combined summary ──────────────────────────────────────────────────
     print("--- Combined summary ---")
     print()
-    hdr = (f"  {'SIZE':8s}  | {'STREAMING (time / mem)':>24s}"
-           f"  | {'BULK-ALLOC (time / mem)':>26s}"
+    hdr = (f"  {'SIZE':8s}  | {'STREAMING (time / cpu / mem)':>30s}"
+           f"  | {'BULK-ALLOC (time / cpu / mem)':>32s}"
            f"  | {'TIME RATIO':>10s}  | {'MEM RATIO':>10s}")
-    sep = (f"  {'--------':8s}  | {'------------------------':>24s}"
-           f"  | {'--------------------------':>26s}"
+    sep = (f"  {'--------':8s}  | {'------------------------------':>30s}"
+           f"  | {'--------------------------------':>32s}"
            f"  | {'----------':>10s}  | {'----------':>10s}")
     print(hdr)
     print(sep)
-    for size, st, sm, bt, bm in rows:
+    for size, st, sm, sc, bt, bm, bc in rows:
         t_ratio = f"{st / bt:.2f}x" if bt > 0 else "n/a"
         m_ratio = f"{sm / bm:.2f}x" if bm > 0 else "n/a"
         s_str = fmt_mem(sm)
         b_str = fmt_mem(bm)
-        print(f"  {size:8s}  | {st:8.3f}s / {s_str:>10s}"
-              f"  | {bt:8.3f}s / {b_str:>12s}"
+        print(f"  {size:8s}  | {st:7.3f}s {sc:6.1f}% / {s_str:>10s}"
+              f"  | {bt:7.3f}s {bc:6.1f}% / {b_str:>12s}"
               f"  | {t_ratio:>10s}  | {m_ratio:>10s}")
     print()
     print("Done.")

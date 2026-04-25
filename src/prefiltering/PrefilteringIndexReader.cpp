@@ -7,6 +7,10 @@
 #include "Masker.h"
 #include "Parameters.h"
 
+#ifdef OPENMP
+#include <omp.h>
+#endif
+
 #include <sys/mman.h>
 
 extern const char* index_version_compatible;
@@ -97,19 +101,21 @@ static void streamSequenceLookupToIndex(DBWriter &writer, unsigned int splitIdx,
     Debug(Debug::INFO) << "Write SEQINDEXSEQOFFSET (" << (keyOffset + PrefilteringIndexReader::SEQINDEXSEQOFFSET) << ")\n";
     writer.writeData((char *) offsets, (dbSize + 1) * sizeof(size_t), keyOffset + PrefilteringIndexReader::SEQINDEXSEQOFFSET, splitIdx);
     writer.alignToPageSize(splitIdx);
-    delete[] offsets;
 
     // Stream SEQINDEXDATA: encode + mask each sequence and write directly
     Debug(Debug::INFO) << "Write SEQINDEXDATA (" << (keyOffset + PrefilteringIndexReader::SEQINDEXDATA) << ") [streaming]\n";
 
     bool needMasking = !isTargetSimiliarKmerSearch && (maskMode > 0 || maskNrepeats > 0 || maskLowerCase > 0);
-    Masker *masker = NULL;
-    if (needMasking) {
-        masker = new Masker(*subMat);
-    }
 
-    // Match fillDatabase's thread-local Sequence parameters (aaBiasCorrection=false)
-    Sequence seq(maxSeqLen, seqType, subMat, kmerSize, hasSpacedKmer, false, true, spacedKmerPattern);
+    // Allocate chunk buffer for parallel encode+mask, serial write
+    const size_t CHUNK_SEQ_COUNT = 100000;
+    size_t maxChunkBytes = 0;
+    for (size_t start = 0; start < dbSize; start += CHUNK_SEQ_COUNT) {
+        size_t end = std::min(start + CHUNK_SEQ_COUNT, dbSize);
+        size_t bytes = offsets[end] - offsets[start];
+        maxChunkBytes = std::max(maxChunkBytes, bytes);
+    }
+    char *chunkBuffer = new char[maxChunkBytes];
 
     // Page cache management: release consumed mmap pages so memory stays
     // constant regardless of input size.  We track the global byte offset
@@ -142,26 +148,56 @@ static void streamSequenceLookupToIndex(DBWriter &writer, unsigned int splitIdx,
 
     Debug::Progress progress(dbSize);
     writer.writeStart(splitIdx);
-    for (size_t id = dbFrom; id < dbFrom + dbSize; id++) {
-        progress.updateProgress();
-        seq.resetCurrPos();
-        char *seqData = dbr->getData(id, 0);
-        unsigned int qKey = dbr->getDbKey(id);
-        seq.mapSequence(id - dbFrom, qKey, seqData, dbr->getSeqLen(id));
+    for (size_t chunkStart = 0; chunkStart < dbSize; chunkStart += CHUNK_SEQ_COUNT) {
+        size_t chunkEnd = std::min(chunkStart + CHUNK_SEQ_COUNT, dbSize);
+        size_t chunkBytes = offsets[chunkEnd] - offsets[chunkStart];
 
-        if (isTargetSimiliarKmerSearch) {
-            unsigned char *seqToWrite = isProfile ? seq.numConsensusSequence : seq.numSequence;
-            writer.writeAdd((const char *) seqToWrite, seq.L, splitIdx);
-        } else {
-            if (masker != NULL) {
-                masker->maskSequence(seq, maskMode > 0, maskProb, maskLowerCase > 0, maskNrepeats);
+        // Parallel encode+mask into chunkBuffer
+#pragma omp parallel
+        {
+            unsigned int thread_idx = 0;
+#ifdef OPENMP
+            thread_idx = static_cast<unsigned int>(omp_get_thread_num());
+#endif
+            Masker *masker = NULL;
+            if (needMasking) {
+                masker = new Masker(*subMat);
             }
-            writer.writeAdd((const char *) seq.numSequence, seq.L, splitIdx);
-        }
+            Sequence seq(maxSeqLen, seqType, subMat, kmerSize, hasSpacedKmer,
+                         false, true, spacedKmerPattern);
+
+#pragma omp for schedule(dynamic, 100)
+            for (size_t i = chunkStart; i < chunkEnd; i++) {
+                progress.updateProgress();
+                size_t id = dbFrom + i;
+                seq.resetCurrPos();
+                char *seqData = dbr->getData(id, thread_idx);
+                unsigned int qKey = dbr->getDbKey(id);
+                seq.mapSequence(i, qKey, seqData, dbr->getSeqLen(id));
+
+                if (isTargetSimiliarKmerSearch) {
+                    unsigned char *src = isProfile ? seq.numConsensusSequence : seq.numSequence;
+                    memcpy(chunkBuffer + (offsets[i] - offsets[chunkStart]), src, seq.L);
+                } else {
+                    if (masker != NULL) {
+                        masker->maskSequence(seq, maskMode > 0, maskProb, maskLowerCase > 0, maskNrepeats);
+                    }
+                    memcpy(chunkBuffer + (offsets[i] - offsets[chunkStart]), seq.numSequence, seq.L);
+                }
+            }
+
+            if (masker != NULL) {
+                delete masker;
+            }
+        } // end omp parallel
+
+        // Serial write of the entire chunk
+        writer.writeAdd(chunkBuffer, chunkBytes, splitIdx);
 
 #ifdef HAVE_POSIX_MADVISE
         // Release consumed mmap pages to keep memory constant.
-        size_t seqEnd = dbr->getOffset(id) + dbr->getEntryLen(id);
+        size_t lastId = dbFrom + chunkEnd - 1;
+        size_t seqEnd = dbr->getOffset(lastId) + dbr->getEntryLen(lastId);
         size_t pageAlignedEnd = (seqEnd / PAGE_SIZE) * PAGE_SIZE;
         if (pageAlignedEnd > advisedUpTo + ADVISE_CHUNK) {
             // Advise DONTNEED on all pages in [advisedUpTo, pageAlignedEnd)
@@ -193,10 +229,9 @@ static void streamSequenceLookupToIndex(DBWriter &writer, unsigned int splitIdx,
     writer.writeEnd(keyOffset + PrefilteringIndexReader::SEQINDEXDATA, splitIdx, true, true);
     writer.alignToPageSize(splitIdx);
 
+    delete[] chunkBuffer;
+    delete[] offsets;
     delete[] fileCumulOff;
-    if (masker != NULL) {
-        delete masker;
-    }
     dbr->remapData();
 }
 
