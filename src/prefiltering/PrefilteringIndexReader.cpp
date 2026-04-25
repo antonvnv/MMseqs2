@@ -7,6 +7,8 @@
 #include "Masker.h"
 #include "Parameters.h"
 
+#include <sys/mman.h>
+
 extern const char* index_version_compatible;
 unsigned int PrefilteringIndexReader::VERSION = 0;
 unsigned int PrefilteringIndexReader::META = 1;
@@ -54,6 +56,10 @@ std::string PrefilteringIndexReader::indexName(const std::string &outDB) {
 // O(totalSeqBytes) heap allocation that IndexBuilder::fillDatabase uses.
 // Encodes + masks each sequence and writes via DBWriter streaming API.
 // Produces byte-identical output to the bulk-allocation path.
+//
+// Memory is kept constant by calling posix_madvise(MADV_DONTNEED) on
+// consumed mmap pages, so the kernel reclaims them instead of letting
+// page cache grow to input size.
 static void streamSequenceLookupToIndex(DBWriter &writer, unsigned int splitIdx, unsigned int keyOffset,
                                         DBReader<unsigned int> *dbr, size_t dbFrom, size_t dbSize,
                                         BaseMatrix *subMat, int seqType, int maxSeqLen, int kmerSize,
@@ -105,6 +111,35 @@ static void streamSequenceLookupToIndex(DBWriter &writer, unsigned int splitIdx,
     // Match fillDatabase's thread-local Sequence parameters (aaBiasCorrection=false)
     Sequence seq(maxSeqLen, seqType, subMat, kmerSize, hasSpacedKmer, false, true, spacedKmerPattern);
 
+    // Page cache management: release consumed mmap pages so memory stays
+    // constant regardless of input size.  We track the global byte offset
+    // of consumed data and periodically call posix_madvise(MADV_DONTNEED)
+    // on the pages behind us.
+    const size_t PAGE_SIZE = sysconf(_SC_PAGESIZE);
+    const size_t ADVISE_CHUNK = 64 * 1024 * 1024;  // release pages every 64 MB
+
+    size_t dataFileCnt = dbr->getDataFileCnt();
+
+    // Precompute cumulative file-start offsets: fileCumulOff[f] is the global
+    // byte offset where file f begins.  fileCumulOff[dataFileCnt] = totalDataSize.
+    size_t *fileCumulOff = new size_t[dataFileCnt + 1];
+    fileCumulOff[0] = 0;
+    for (size_t f = 0; f < dataFileCnt; f++) {
+        fileCumulOff[f + 1] = fileCumulOff[f] + dbr->getDataSizeForFile(f);
+    }
+
+#ifdef HAVE_POSIX_MADVISE
+    for (size_t f = 0; f < dataFileCnt; f++) {
+        size_t fileSize = dbr->getDataSizeForFile(f);
+        if (fileSize > 0) {
+            posix_madvise(dbr->getDataForFile(f), fileSize, POSIX_MADV_SEQUENTIAL);
+        }
+    }
+#endif
+
+    // Global byte offset up to which we've advised DONTNEED (page-aligned).
+    size_t advisedUpTo = 0;
+
     Debug::Progress progress(dbSize);
     writer.writeStart(splitIdx);
     for (size_t id = dbFrom; id < dbFrom + dbSize; id++) {
@@ -123,6 +158,34 @@ static void streamSequenceLookupToIndex(DBWriter &writer, unsigned int splitIdx,
             }
             writer.writeAdd((const char *) seq.numSequence, seq.L, splitIdx);
         }
+
+#ifdef HAVE_POSIX_MADVISE
+        // Release consumed mmap pages to keep memory constant.
+        size_t seqEnd = dbr->getOffset(id) + dbr->getEntryLen(id);
+        size_t pageAlignedEnd = (seqEnd / PAGE_SIZE) * PAGE_SIZE;
+        if (pageAlignedEnd > advisedUpTo + ADVISE_CHUNK) {
+            // Advise DONTNEED on all pages in [advisedUpTo, pageAlignedEnd)
+            // across whichever data files they span.
+            for (size_t f = 0; f < dataFileCnt; f++) {
+                size_t fileStart = fileCumulOff[f];
+                size_t fileEnd = fileCumulOff[f + 1];
+                // Intersect [advisedUpTo, pageAlignedEnd) with [fileStart, fileEnd)
+                size_t rangeStart = std::max(advisedUpTo, fileStart);
+                size_t rangeEnd = std::min(pageAlignedEnd, fileEnd);
+                if (rangeStart >= rangeEnd) {
+                    continue;
+                }
+                // Convert to file-local offsets, page-align start upward
+                size_t localStart = ((rangeStart - fileStart + PAGE_SIZE - 1) / PAGE_SIZE) * PAGE_SIZE;
+                size_t localEnd = (rangeEnd - fileStart) / PAGE_SIZE * PAGE_SIZE;
+                if (localStart < localEnd) {
+                    posix_madvise(dbr->getDataForFile(f) + localStart,
+                                  localEnd - localStart, POSIX_MADV_DONTNEED);
+                }
+            }
+            advisedUpTo = pageAlignedEnd;
+        }
+#endif
     }
     // Sentinel byte to match original SequenceLookup buffer layout (dataSize+1 allocation)
     char sentinel = '\0';
@@ -130,6 +193,7 @@ static void streamSequenceLookupToIndex(DBWriter &writer, unsigned int splitIdx,
     writer.writeEnd(keyOffset + PrefilteringIndexReader::SEQINDEXDATA, splitIdx, true, true);
     writer.alignToPageSize(splitIdx);
 
+    delete[] fileCumulOff;
     if (masker != NULL) {
         delete masker;
     }
