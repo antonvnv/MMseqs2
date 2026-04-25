@@ -25,7 +25,8 @@ import tempfile
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 CORRECTNESS_SIZES = ["1M", "10M", "50M"]
-BENCH_SIZES = ["1M", "10M", "50M", "100M", "500M"]
+BENCH_SIZES = ["1M", "10M", "50M", "100M", "500M", "1000M", "2000M"]
+DATA_CACHE_DIR = "/tmp/bench_createindex_stream_data"
 
 # Keys in the .idx index file for the SequenceLookup data
 SEQLOOKUP_KEYS = {
@@ -115,11 +116,16 @@ def measure(args):
 
 
 def gen_fasta(gen_script, size, output):
-    """Generate a synthetic FASTA file."""
+    """Generate a synthetic FASTA file, using a persistent cache."""
+    if os.path.isfile(output):
+        return
+    os.makedirs(os.path.dirname(output), exist_ok=True)
+    tmp = output + f".tmp.{os.getpid()}"
     subprocess.run(
-        [sys.executable, gen_script, "--size", size, "-o", output],
+        [sys.executable, gen_script, "--size", size, "-o", tmp],
         check=True, stderr=subprocess.DEVNULL,
     )
+    os.rename(tmp, output)
 
 
 def read_idx_index(path):
@@ -233,8 +239,10 @@ def main():
     print(f"Using mmseqs: {mmseqs}")
     print()
 
+    # Ephemeral directory for correctness/perf intermediates (cleaned up)
     tmpdir = tempfile.mkdtemp(prefix="bench_createindex_stream_")
     print(f"Working directory: {tmpdir}")
+    print(f"Data cache:        {DATA_CACHE_DIR}")
     print()
 
     try:
@@ -248,6 +256,7 @@ def _run(mmseqs, gen_script, tmpdir):
                        key=lambda s: _parse_size(s))
 
     # ── Generate FASTA files + padded DBs ──────────────────────────────────
+    # Cached in DATA_CACHE_DIR so they survive across runs.
     # We use GPU-padded DBs (makepaddedseqdb) for all tests because that's
     # the real use case. With --index-subset 2:
     #   Reference: original path (fillDatabase builds SequenceLookup in bulk)
@@ -255,6 +264,8 @@ def _run(mmseqs, gen_script, tmpdir):
     #
     # The streaming path activates when needSequenceLookup=true && needKmerIndex=false,
     # which is exactly --index-subset 2.
+
+    os.makedirs(DATA_CACHE_DIR, exist_ok=True)
 
     print("========================================")
     print("  Generating test data")
@@ -264,17 +275,21 @@ def _run(mmseqs, gen_script, tmpdir):
     paddb_paths = {}
 
     for size in all_sizes:
-        fasta = os.path.join(tmpdir, f"test_{size}.fasta")
+        fasta = os.path.join(DATA_CACHE_DIR, f"test_{size}.fasta")
+        fasta_cached = os.path.isfile(fasta)
         gen_fasta(gen_script, size, fasta)
         fasta_paths[size] = fasta
         mb = os.path.getsize(fasta) / 1024**2
 
-        paddb = os.path.join(tmpdir, f"paddb_{size}")
-        run_cmd([mmseqs, "makepaddedseqdb", fasta, paddb,
-                 "--max-seq-len", "10000", "--threads", "1"])
+        paddb = os.path.join(DATA_CACHE_DIR, f"paddb_{size}")
+        paddb_cached = os.path.isfile(paddb + ".dbtype")
+        if not paddb_cached:
+            run_cmd([mmseqs, "makepaddedseqdb", fasta, paddb,
+                     "--max-seq-len", "10000", "--threads", "1"])
         paddb_paths[size] = paddb
 
-        print(f"  {size:>6s}  {mb:8.1f} MB")
+        tag = "cached" if (fasta_cached and paddb_cached) else "generated"
+        print(f"  {size:>6s}  {mb:8.1f} MB  ({tag})")
     print()
 
     # ── Correctness ───────────────────────────────────────────────────────
