@@ -16,14 +16,18 @@
 #include <algorithm>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
 
 #ifdef OPENMP
 #include <omp.h>
 #endif
 
 struct EntryMeta {
-    std::string header;  // "name comment\n" (with trailing newline)
-    size_t seqLen;       // sequence length (no sequence bytes stored)
+    std::string header;      // "name comment\n" (with trailing newline)
+    size_t seqLen;           // sequence length (no sequence bytes stored)
+    size_t sequenceOffset;   // byte offset in FASTA where sequence starts
+    int newlineCount;        // newlines within sequence (for multi-line FASTA)
 };
 
 struct SortEntry {
@@ -46,6 +50,7 @@ static int makepaddedseqdbFromFasta(Parameters &par) {
     std::vector<EntryMeta> entries;
     size_t maxEntrySeqLen = 0;
     int dbType = par.dbType;
+    bool canMmap = false;
     {
         size_t sampleCount = 0;
         size_t isNuclCnt = 0;
@@ -65,6 +70,8 @@ static int makepaddedseqdbFromFasta(Parameters &par) {
             }
             meta.header.push_back('\n');
             meta.seqLen = e.sequence.l;
+            meta.sequenceOffset = e.sequenceOffset;
+            meta.newlineCount = e.newlineCount;
             maxEntrySeqLen = std::max(maxEntrySeqLen, e.sequence.l);
 
             // Auto-detect nucleotide/amino acid (same heuristic as createdb)
@@ -90,6 +97,7 @@ static int makepaddedseqdbFromFasta(Parameters &par) {
 
             entries.push_back(std::move(meta));
         }
+        canMmap = (kseq->type == KSeqWrapper::KSEQ_FILE);
         delete kseq;
 
         if (entries.empty()) {
@@ -298,21 +306,117 @@ static int makepaddedseqdbFromFasta(Parameters &par) {
         EXIT(EXIT_FAILURE);
     }
 
-    SubstitutionMatrix subMat(par.scoringMatrixFile.values.aminoacid().c_str(), 2.0, par.scoreBias);
-    Masker masker(subMat);
-    Sequence seq(maxChunkLen, seqType, &subMat, 0, false, false);
-    std::string result;
-    result.reserve(maxChunkLen + ALIGN);
+    if (canMmap) {
+        // mmap the input FASTA for parallel random access
+        int mmapFd = ::open(par.db1.c_str(), O_RDONLY);
+        if (mmapFd < 0) {
+            Debug(Debug::ERROR) << "Cannot open FASTA file for mmap: " << par.db1 << "\n";
+            EXIT(EXIT_FAILURE);
+        }
+        struct stat fileStat;
+        if (fstat(mmapFd, &fileStat) != 0) {
+            Debug(Debug::ERROR) << "Cannot stat FASTA file: " << par.db1 << "\n";
+            EXIT(EXIT_FAILURE);
+        }
+        size_t fastaFileSize = fileStat.st_size;
+        char *fastaData = (char *)mmap(NULL, fastaFileSize, PROT_READ, MAP_PRIVATE, mmapFd, 0);
+        if (fastaData == MAP_FAILED) {
+            Debug(Debug::ERROR) << "Cannot mmap FASTA file: " << par.db1 << "\n";
+            EXIT(EXIT_FAILURE);
+        }
+#ifdef HAVE_POSIX_MADVISE
+        posix_madvise(fastaData, fastaFileSize, POSIX_MADV_RANDOM);
+#endif
 
-    size_t charSeqBufferSize = maxChunkLen + 1;
-    unsigned char *charSequence = NULL;
-    if (par.maskMode) {
-        charSequence = (unsigned char *)malloc(charSeqBufferSize * sizeof(char));
-    }
+        SubstitutionMatrix subMat(par.scoringMatrixFile.values.aminoacid().c_str(), 2.0, par.scoreBias);
 
-    Debug::Progress progress(entries.size());
+        Debug::Progress progress(entries.size());
 
-    {
+#pragma omp parallel
+{
+        Masker masker(subMat);
+        Sequence seq(maxChunkLen, seqType, &subMat, 0, false, false);
+        std::string result;
+        result.reserve(maxChunkLen + ALIGN);
+        char *seqBuf = new char[maxEntrySeqLen + 1];
+        size_t charSeqBufferSize = maxChunkLen + 1;
+        unsigned char *charSequence = NULL;
+        if (par.maskMode) {
+            charSequence = (unsigned char *)malloc(charSeqBufferSize * sizeof(char));
+        }
+
+#pragma omp for schedule(dynamic, 100)
+        for (size_t entryIdx = 0; entryIdx < entries.size(); entryIdx++) {
+            progress.updateProgress();
+            const EntryMeta &meta = entries[entryIdx];
+            const std::vector<ChunkWriteInfo> &chunks = entryChunkMap[entryIdx];
+
+            // Strip newlines from mmap'd data into contiguous buffer
+            const char *raw = fastaData + meta.sequenceOffset;
+            size_t rawLen = meta.seqLen + meta.newlineCount;
+            size_t cleanLen = 0;
+            for (size_t r = 0; r < rawLen && cleanLen < meta.seqLen; r++) {
+                if (raw[r] != '\n' && raw[r] != '\r') {
+                    seqBuf[cleanLen++] = raw[r];
+                }
+            }
+
+            for (size_t c = 0; c < chunks.size(); c++) {
+                const ChunkWriteInfo &chunk = chunks[c];
+                const char *chunkData = seqBuf + chunk.startPos;
+                size_t chunkLen = chunk.chunkLen;
+
+                seq.mapSequence(0, 0, chunkData, chunkLen);
+
+                if (charSequence != NULL) {
+                    if (static_cast<size_t>(seq.L) >= charSeqBufferSize) {
+                        charSeqBufferSize = static_cast<size_t>(seq.L * 1.5);
+                        charSequence = (unsigned char *)realloc(charSequence, charSeqBufferSize * sizeof(char));
+                    }
+                    memcpy(charSequence, seq.numSequence, seq.L);
+                    masker.maskSequence(seq, par.maskMode, par.maskProb, par.maskLowerCaseMode, par.maskNrepeats);
+                    for (int j = 0; j < seq.L; j++) {
+                        result.append(1, (seq.numSequence[j] == masker.maskLetterNum) ? charSequence[j] + 32 : charSequence[j]);
+                    }
+                } else {
+                    for (int j = 0; j < seq.L; j++) {
+                        char aa = chunkData[j];
+                        result.append(1, (islower(aa)) ? seq.numSequence[j] + 32 : seq.numSequence[j]);
+                    }
+                }
+
+                const size_t seqPadding = (seq.L % ALIGN == 0) ? 0 : ALIGN - seq.L % ALIGN;
+                result.append(seqPadding, static_cast<char>(24));
+
+                pwrite(dataFd, result.c_str(), result.size(), chunk.dataOffset);
+                result.clear();
+            }
+        }
+
+        delete[] seqBuf;
+        if (charSequence != NULL) {
+            free(charSequence);
+        }
+}
+
+        munmap(fastaData, fastaFileSize);
+        ::close(mmapFd);
+    } else {
+        // Fallback: sequential Pass 2 for compressed/stdin inputs
+        SubstitutionMatrix subMat(par.scoringMatrixFile.values.aminoacid().c_str(), 2.0, par.scoreBias);
+        Masker masker(subMat);
+        Sequence seq(maxChunkLen, seqType, &subMat, 0, false, false);
+        std::string result;
+        result.reserve(maxChunkLen + ALIGN);
+
+        size_t charSeqBufferSize = maxChunkLen + 1;
+        unsigned char *charSequence = NULL;
+        if (par.maskMode) {
+            charSequence = (unsigned char *)malloc(charSeqBufferSize * sizeof(char));
+        }
+
+        Debug::Progress progress(entries.size());
+
         KSeqWrapper *kseq = KSeqFactory(par.db1.c_str());
         size_t entryIdx = 0;
         while (kseq->ReadEntry()) {
@@ -360,13 +464,13 @@ static int makepaddedseqdbFromFasta(Parameters &par) {
             entryIdx++;
         }
         delete kseq;
+
+        if (charSequence != NULL) {
+            free(charSequence);
+        }
     }
 
     ::close(dataFd);
-
-    if (charSequence != NULL) {
-        free(charSequence);
-    }
 
     // Write index file
     {
