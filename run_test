@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+"""Test nucleotide search workflow.
+
+Usage:
+    ./run_test                                  # use tree this script lives in
+    ./run_test src/MMseqs2/pskvins              # use a specific tree
+    ./run_test /path/to/mmseqs                  # use a specific binary
+    ./run_test /path/to/db.idx                  # use a pre-built index
+    ./run_test src/MMseqs2/pskvins db.idx       # combine (order doesn't matter)
+
+Arguments are detected by type (order doesn't matter):
+    - directory      -> search recursively for 'mmseqs' executable
+    - executable     -> mmseqs binary
+    - .fasta file    -> input FASTA (target DB from whole file,
+                        query DB from first sequence)
+    - .idx file      -> pre-built index (used as target DB directly)
+
+Defaults: mmseqs from the tree this script lives in. If no FASTA given,
+generates a random RNA database (1000 sequences, seed=42).
+
+Environment variables:
+    GPU           0 or 1 (default: 1)
+    GPU_SERVER    0 or 1 (default: 0)
+    THREADS       number of threads (default: 64)
+    MANUAL_INDEX  if set, use explicit pipeline instead of 'databases'
+    INDEX_SUBSET  passed to createindex --index-subset (manual mode only)
+"""
+
+import hashlib
+import os
+from os import getenv
+import random
+import re
+import shutil
+import signal
+import subprocess
+import sys
+from pathlib import Path
+
+
+def find_mmseqs_in_dir(d):
+    """Recursively find executables named 'mmseqs' under directory d."""
+    found = []
+    for root, dirs, files in os.walk(d):
+        if "mmseqs" in files:
+            p = Path(root) / "mmseqs"
+            if os.access(p, os.X_OK):
+                found.append(p.resolve())
+    return found
+
+
+def parse_args(argv):
+    """Parse arguments by type. Returns (mmseqs_bin, fasta, idx_file)."""
+    script_dir = Path(__file__).resolve().parent
+    mmseqs_bin = None
+    fasta = None
+    idx_file = None
+
+    for arg in argv[1:]:
+        p = Path(arg)
+        if p.is_dir():
+            found = find_mmseqs_in_dir(p)
+            if len(found) == 0:
+                sys.exit(f"Error: no mmseqs executable found under {p}")
+            elif len(found) > 1:
+                sys.exit(f"Error: multiple mmseqs executables found under {p}:\n"
+                         + "\n".join(f"  {f}" for f in found))
+            mmseqs_bin = found[0]
+        elif p.is_file() and os.access(p, os.X_OK):
+            mmseqs_bin = p.resolve()
+        elif p.suffix == ".idx" and p.is_file():
+            idx_file = p.resolve()
+        elif p.suffix == ".fasta" and p.is_file():
+            fasta = p.resolve()
+
+    # Default mmseqs: search in the tree this script lives in
+    if mmseqs_bin is None:
+        found = find_mmseqs_in_dir(script_dir)
+        if len(found) == 1:
+            mmseqs_bin = found[0]
+        elif len(found) > 1:
+            sys.exit(f"Error: multiple mmseqs executables found under {script_dir}:\n"
+                     + "\n".join(f"  {f}" for f in found))
+        else:
+            sys.exit(f"Error: no mmseqs executable found under {script_dir}\n"
+                     "Run ./run_build first.")
+
+    return mmseqs_bin, fasta, idx_file
+
+
+def run(args):
+    """Run a command, printing it first."""
+    print(f"+ {' '.join(str(a) for a in args)}", flush=True)
+    subprocess.run([str(a) for a in args], check=True)
+
+
+# Real sequence used as query and as first entry in generated FASTAs.
+QUERY = """>URS000149A9AF rRNA from 1 species
+ATACGTAGGTGACAAGCGTTATCCGGATTTACTGGGCGTAAAGGGCGTGTAGGCGGTCTT
+GCAAGTCAGAAGTGAAATTCCTGAGCTCAACTCGGGCGCTGCTTCTGAAACTGCAGGACT
+TGAGTGCTGGAGGGGATAGCGGAATTCCTAGTGGAGCGGTAAAATGCGCAGATATTAGGA
+AGAACACCGGTGGCGAAGGCGGCTATCTGGACAGTAACTGACGCTGAGGCGCGAAATCGT
+GGGGAGCAAACAGGATTAGATACCCTGGTAGTCCACGCCGTAAACGATGAATACTAGGTG
+TAGGGGGTATCGACTCCCTCTGTGCCGCAGTTAACACAATAAGTATTCCGCCTGGGGAGT
+ACGGCCGCAAGGTTGAAACTTAAAGGAATTGGCGGGG"""
+
+def gen_fasta(data_dir, num_seqs=1000, max_len=20000, seed=42, bases="ACGU"):
+    """Generate a random RNA FASTA with fixed seed. Idempotent and atomic.
+
+    The first entry is always the hardcoded query sequence (X17276.1),
+    followed by num_seqs-1 random sequences.
+    """
+    data_dir = Path(data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    params_hash = hashlib.md5(
+        f"{num_seqs},{max_len},{seed},{bases},{QUERY}".encode()
+    ).hexdigest()[:8]
+    path = data_dir / f"test_{num_seqs}_{params_hash}.fasta"
+    if path.exists():
+        print(f"Using cached {path}", flush=True)
+        return path
+    print(f"Generating {path}", flush=True)
+    tmp = path.with_suffix(f".tmp.{os.getpid()}")
+    rng = random.Random(seed)
+    with open(tmp, "w") as f:
+        f.write(f"{QUERY}\n")
+        for i in range(1, num_seqs):
+            seq_len = rng.randint(1, max_len)
+            f.write(f">Seq{i}\n")
+            f.write("".join(rng.choice(bases) for _ in range(seq_len)))
+            f.write("\n")
+    tmp.rename(path)
+    return path
+
+
+def db_name(fasta_path):
+    """Derive DB name from FASTA filename."""
+    return re.sub(r"\.fasta$", "", Path(fasta_path).name)
+
+
+def create_target_db(mmseqs, db_dir, fasta, threads):
+    os.makedirs(db_dir, exist_ok=True)
+
+    if getenv("MANUAL_INDEX", ""):
+        name = db_name(fasta)
+        env = {**os.environ, "MMSEQS_FORCE_MERGE": "1"}
+        run([mmseqs, "createdb", fasta, f"{db_dir}/{name}_db",
+             "--threads", threads])
+        run([mmseqs, "splitsequence", f"{db_dir}/{name}_db", f"{db_dir}/{name}_split_db",
+             "--sequence-overlap", "0", "--sequence-split-mode", "0",
+             "--headers-split-mode", "1", "--threads", threads])
+        run([mmseqs, "makepaddedseqdb", f"{db_dir}/{name}_split_db",
+             f"{db_dir}/{name}_padded_db", "--threads", threads])
+        index_args = [mmseqs, "createindex", f"{db_dir}/{name}_padded_db",
+                      f"{db_dir}/tmp", "--split", "1", "--threads", threads]
+        index_subset = getenv("INDEX_SUBSET", "")
+        if index_subset:
+            index_args += ["--index-subset", index_subset]
+        print(f"+ {' '.join(str(a) for a in index_args)}", flush=True)
+        subprocess.run([str(a) for a in index_args], check=True, env=env)
+        shutil.rmtree(f"{db_dir}/tmp", ignore_errors=True)
+        return f"{db_dir}/{name}_padded_db"
+    else:
+        run([mmseqs, "databases", fasta, f"{db_dir}/db", f"{db_dir}/tmp",
+             "--threads", threads, "--remove-tmp-files", "1"])
+        return f"{db_dir}/db"
+
+
+def create_query_db(mmseqs, threads):
+    Path("query.fasta").write_text(f"{QUERY}\n")
+    run([mmseqs, "createdb", "query.fasta", "query_db", "--threads", threads])
+
+
+class GPUServer:
+    """Context manager that starts gpuserver if GPU=1 and GPU_SERVER=1."""
+
+    def __init__(self, mmseqs, target_db):
+        self.mmseqs = mmseqs
+        self.target_db = target_db
+        self.proc = None
+
+    def __enter__(self):
+        if getenv("GPU", "1") == "1" and getenv("GPU_SERVER", "0") == "1":
+            cmd = [str(self.mmseqs), "gpuserver", str(self.target_db), "--max-seqs", "30000"]
+            print(f"+ {' '.join(cmd)} &", flush=True)
+            self.proc = subprocess.Popen(cmd)
+        return self
+
+    def __exit__(self, *exc):
+        if self.proc is not None:
+            self.proc.send_signal(signal.SIGTERM)
+            try:
+                self.proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait()
+            self.proc = None
+
+
+def search(mmseqs, query_db, target_db, threads):
+    label = f"{Path(query_db).name}_vs_{Path(target_db).name}"
+    a3m = f"result_{label}.a3m"
+
+    for p in Path(".").glob("result_db*"):
+        if p.is_dir():
+            shutil.rmtree(p)
+        else:
+            p.unlink()
+    shutil.rmtree("tmp", ignore_errors=True)
+
+    run([mmseqs, "search", query_db, target_db, "result_db", "tmp",
+         "--num-iterations", "3",
+         "-e", "0.1",
+         "-a",
+         "--max-seqs", "30000",
+         "--prefilter-mode", "1",
+         "--db-load-mode", "2",
+         "--gpu", getenv("GPU", "1"),
+         "--gpu-server", getenv("GPU_SERVER", "0"),
+         "--split", "1",
+         "--threads", threads])
+
+    run([mmseqs, "result2msa", query_db, target_db, "result_db", a3m,
+         "--msa-format-mode", "6",
+         "--filter-msa", "1", "--filter-min-enable", "1000", "--diff", "3000",
+         "--qid", "0.0,0.2,0.4,0.6,0.8,1.0", "--max-seq-id", "0.95",
+         "--threads", threads])
+
+    return label, a3m
+
+
+def print_results(results):
+    for label, a3m in results:
+        lines = Path(a3m).read_text().splitlines()
+        print(f"=== {label} result (first 10 of {len(lines)} lines) ===")
+        for line in lines[:10]:
+            print(line)
+        print(f"=== end {label} ===")
+
+
+def main():
+    mmseqs, fasta, idx_file = parse_args(sys.argv)
+    threads = getenv("THREADS", "64")
+
+    data_dir = Path("run_test_data").resolve()
+    if fasta is None:
+        fasta = gen_fasta(data_dir, num_seqs=1 if idx_file else 1000)
+
+    work_dir = Path("run_test_work_dir")
+    shutil.rmtree(work_dir, ignore_errors=True)
+    work_dir.mkdir(parents=True)
+    os.chdir(work_dir)
+
+    if idx_file:
+        target_db = str(idx_file)
+    else:
+        target_db = create_target_db(mmseqs, "target", fasta, threads)
+
+    create_query_db(mmseqs, threads)
+
+    results = []
+    with GPUServer(mmseqs, target_db):
+        result = search(mmseqs, "query_db", target_db, threads)
+        results.append(result)
+
+    print_results(results)
+
+
+if __name__ == "__main__":
+    main()

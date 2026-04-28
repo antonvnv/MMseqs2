@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Build an MMseqs2 tree.
+#
+# Usage:
+#   ./run_build                       # build the tree this script lives in
+#   ./run_build path/to/MMseqs2       # build a specific tree
+#
+# The build directory is path/to/MMseqs2/build.
+
+set -x -e -o pipefail
+
+# Resolve the real script location (follows symlinks)
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+
+# Determine the tree to build
+TREE_DIR=
+for arg in "$@"; do
+    if [ -d "$arg" ]; then
+        TREE_DIR=$(readlink -f "$arg")
+    fi
+done
+
+# Default: the tree this script lives in
+if [ -z "$TREE_DIR" ]; then
+    TREE_DIR="$SCRIPT_DIR"
+fi
+
+# Configure if needed
+if [ ! -e "$TREE_DIR/build" ]; then
+    mkdir -p "$TREE_DIR/build"
+    pushd "$TREE_DIR/build"
+    cmake -DHAVE_MPI=0 \
+          -DENABLE_CUDA=1 \
+          -DHAVE_TESTS=1 \
+          -DHAVE_AVX2=1 \
+          -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=. \
+          ..
+    popd
+fi
+
+# Build
+pushd "$TREE_DIR/build"
+make -j64
